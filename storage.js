@@ -1,7 +1,9 @@
-// Persistance locale (historique des parties) via localStorage.
+// Persistance locale (historique des parties + mots personnalisés) via localStorage.
 'use strict';
 
 const STORAGE_KEY = 'trefle-indices:historique';
+const CUSTOM_WORDS_KEY = 'trefle-indices:mots-ajoutes';
+const REMOVED_WORDS_KEY = 'trefle-indices:mots-retires';
 
 function loadHistory() {
   try {
@@ -28,7 +30,56 @@ function bestScore() {
   return history.reduce((best, g) => (g.ratio > best.ratio ? g : best), history[0]);
 }
 
-if (typeof window !== 'undefined') {
-  window.Storage = { loadHistory, saveGameResult, bestScore };
+// --- Liste de mots personnalisée ---
+// Deux listes stockées séparément du dictionnaire généré (data/words.js, qui ne doit
+// pas être édité à la main) :
+// - mots ajoutés par les joueurs (viennent s'ajouter au dictionnaire de base)
+// - mots retirés du dictionnaire de base (exclus des parties, sans modifier le fichier source)
+
+function loadWordList(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return [];
+  }
 }
 
+function saveWordList(key, list) {
+  const clean = Array.from(new Set(list.map((w) => String(w).trim().toLowerCase()).filter(Boolean))).sort();
+  try {
+    localStorage.setItem(key, JSON.stringify(clean));
+  } catch (e) {
+    // stockage indisponible (mode privé, quota...) : on ignore silencieusement
+  }
+  return clean;
+}
+
+function loadCustomWords() {
+  return loadWordList(CUSTOM_WORDS_KEY);
+}
+
+function saveCustomWords(list) {
+  return saveWordList(CUSTOM_WORDS_KEY, list);
+}
+
+function loadRemovedWords() {
+  return loadWordList(REMOVED_WORDS_KEY);
+}
+
+function saveRemovedWords(list) {
+  return saveWordList(REMOVED_WORDS_KEY, list);
+}
+
+if (typeof window !== 'undefined') {
+  window.Storage = {
+    loadHistory,
+    saveGameResult,
+    bestScore,
+    loadCustomWords,
+    saveCustomWords,
+    loadRemovedWords,
+    saveRemovedWords,
+  };
+}

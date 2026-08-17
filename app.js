@@ -18,6 +18,22 @@
   });
   const MIN_PLAYERS = 3;
   const MAX_PLAYERS = 8;
+  const WORD_RE = /^[a-zàâäéèêëïîôöùûüçœæ'-]+$/i;
+
+  // Terminaisons de conjugaison assez spécifiques pour repérer un verbe conjugué avec peu
+  // de faux positifs (on évite volontairement les terminaisons trop courtes/ambiguës comme
+  // "e", "es", "ent" seules, très fréquentes aussi dans des noms/adjectifs).
+  const VERB_ENDINGS = [
+    'eraient', 'erions', 'eriez', 'erais', 'erait', 'erons', 'erez', 'eront', 'erai', 'eras', 'era',
+    'assions', 'assiez', 'assent', 'asses', 'asse',
+    'ussions', 'ussiez', 'ussent', 'usses', 'usse',
+    'aient', 'ions', 'iez', 'ait', 'ais',
+    'èrent', 'âmes', 'âtes', 'îmes', 'îtes', 'irent',
+  ];
+
+  function isLikelyConjugatedVerb(word) {
+    return VERB_ENDINGS.some((suf) => word.length - suf.length >= 3 && word.endsWith(suf));
+  }
 
   const app = document.getElementById('app');
 
@@ -48,11 +64,56 @@
       maxScore: 0,
       nextScreenAfterTransition: '',
       rulesOpen: false,
+      wordsPanelOpen: false,
+      wordFilterQuery: '',
+      wordFilterStatus: 'custom',
     };
   }
 
   function findTile(round, tileId) {
     return round.tiles.find((t) => t.id === tileId) || null;
+  }
+
+  // --- Liste de mots effective (dictionnaire de base + ajouts - retraits) ---
+
+  function normalizeWord(word) {
+    const w = String(word || '').trim().toLowerCase();
+    if (!w || !WORD_RE.test(w)) return '';
+    return w;
+  }
+
+  function getWordList() {
+    const removed = new Set(Storage.loadRemovedWords ? Storage.loadRemovedWords() : []);
+    const custom = Storage.loadCustomWords ? Storage.loadCustomWords() : [];
+    const base = WORDS.filter((w) => !removed.has(w));
+    custom.forEach((w) => { if (!base.includes(w)) base.push(w); });
+    return base;
+  }
+
+  /** Construit la liste de mots { word, status } selon le filtre de statut et le texte de recherche. */
+  function getFilteredWords() {
+    const removed = Storage.loadRemovedWords ? Storage.loadRemovedWords() : [];
+    const custom = Storage.loadCustomWords ? Storage.loadCustomWords() : [];
+    const removedSet = new Set(removed);
+    const status = state.wordFilterStatus;
+    let items;
+    if (status === 'custom') {
+      items = custom.map((w) => ({ word: w, status: 'custom' }));
+    } else if (status === 'removed') {
+      items = removed.map((w) => ({ word: w, status: 'removed' }));
+    } else if (status === 'dictionary') {
+      items = WORDS.filter((w) => !removedSet.has(w)).map((w) => ({ word: w, status: 'dictionary' }));
+    } else if (status === 'verbs') {
+      items = WORDS.filter((w) => !removedSet.has(w) && isLikelyConjugatedVerb(w)).map((w) => ({ word: w, status: 'dictionary' }));
+    } else {
+      items = WORDS.filter((w) => !removedSet.has(w)).map((w) => ({ word: w, status: 'dictionary' }))
+        .concat(custom.map((w) => ({ word: w, status: 'custom' })))
+        .concat(removed.map((w) => ({ word: w, status: 'removed' })));
+    }
+    const query = state.wordFilterQuery.trim().toLowerCase();
+    if (query) items = items.filter((it) => it.word.includes(query));
+    items.sort((a, b) => a.word.localeCompare(b.word, 'fr'));
+    return items;
   }
 
   function tileFaceHTML(words, exteriorSet, opts) {
@@ -133,8 +194,7 @@
 
     app.innerHTML = `
       <section class="screen screen-setup">
-        <h1>🍀 Trèfle &amp; Indices</h1>
-        <p class="subtitle">Jeu d'association de mots, inspiré de So Clover!, jouable hors-ligne à plusieurs sur un seul appareil.</p>
+        <h1>🍀 So lover</h1>
         ${best ? `<p class="best-score">Meilleur score : ${best.totalScore}/${best.maxScore} (${Math.round(best.ratio * 100)}%)</p>` : ''}
         <h2>Joueurs (3 à 8)</h2>
         <div class="player-list">${nameInputs}</div>
@@ -144,7 +204,18 @@
         <button class="btn btn-primary btn-large" data-action="start-game">Commencer la partie</button>
         <button class="btn btn-link" data-action="toggle-rules">📖 Règles du jeu</button>
         ${state.rulesOpen ? renderRules() : ''}
+        <button class="btn btn-link" data-action="toggle-words">📝 Gérer les mots</button>
+        ${state.wordsPanelOpen ? renderWordsManager() : ''}
       </section>`;
+
+    if (state.wordsPanelOpen) {
+      const input = app.querySelector('.word-search');
+      if (input) {
+        input.focus();
+        const v = input.value;
+        input.setSelectionRange(v.length, v.length);
+      }
+    }
   }
 
   function renderRules() {
@@ -155,6 +226,66 @@
         <p>Le donneur d'indices de la manche voit la disposition secrète et propose un indice (un mot ou une courte expression) pour chacune des 4 paires, directement sur le bord concerné.</p>
         <p>Les autres joueurs récupèrent les 4 tuiles (mélangées et retournées au hasard) <strong>+ une 5<sup>e</sup> tuile piège</strong>, et doivent replacer les bonnes tuiles dans le bon sens sur le trèfle à l'aide des 4 indices.</p>
         <p>Chaque joueur est donneur d'indices une fois. Le score de l'équipe est le total des paires correctement reconstituées sur toutes les manches.</p>
+      </div>`;
+  }
+
+  function renderWordsManager() {
+    const removed = Storage.loadRemovedWords ? Storage.loadRemovedWords() : [];
+    const custom = Storage.loadCustomWords ? Storage.loadCustomWords() : [];
+    const rawQuery = state.wordFilterQuery || '';
+    const query = normalizeWord(rawQuery);
+
+    let addSuggestionHTML = '';
+    if (rawQuery.trim() && !query) {
+      addSuggestionHTML = `<p class="word-search-result">Mot invalide (lettres uniquement).</p>`;
+    } else if (query && !WORDS.includes(query) && !custom.includes(query) && !removed.includes(query)) {
+      addSuggestionHTML = `<p class="word-search-result">« ${esc(query)} » n'existe pas encore.
+        <button class="btn btn-secondary" data-action="add-word" data-word="${esc(query)}">+ Ajouter ce mot</button></p>`;
+    }
+
+    const filters = [
+      { key: 'custom', label: `Ajoutés (${custom.length})` },
+      { key: 'dictionary', label: 'Dictionnaire' },
+      { key: 'verbs', label: 'Verbes conjugués' },
+      { key: 'removed', label: `Retirés (${removed.length})` },
+      { key: 'all', label: 'Tous' },
+    ];
+    const filterButtonsHTML = filters.map((f) => `
+      <button class="btn btn-filter ${state.wordFilterStatus === f.key ? 'btn-primary' : 'btn-secondary'}" data-action="set-word-filter" data-filter="${f.key}">${f.label}</button>`).join('');
+
+    const results = getFilteredWords();
+    const removableCount = results.filter((it) => it.status === 'dictionary').length;
+    const verbsNoticeHTML = state.wordFilterStatus === 'verbs'
+      ? `<p class="hint">Détection automatique par terminaisons (imparfait, futur, passé simple…), approximative : vérifiez avant de tout retirer, vous pourrez toujours remettre un mot depuis l'onglet « Retirés ».</p>
+         ${removableCount ? `<button class="btn btn-secondary btn-bulk" data-action="exclude-all-filtered">Retirer ces ${removableCount} mots</button>` : ''}`
+      : '';
+    const rowsHTML = results.length ? results.map((item) => {
+      const action = item.status === 'dictionary' ? 'exclude-word' : (item.status === 'custom' ? 'remove-custom-word' : 'restore-word');
+      const icon = item.status === 'removed' ? '↺' : '✕';
+      const title = item.status === 'removed' ? 'Remettre' : 'Retirer';
+      return `<div class="word-cell word-cell--${item.status}">
+        <span>${esc(item.word)}</span>
+        <button class="word-cell-btn" data-action="${action}" data-word="${esc(item.word)}" title="${title}">${icon}</button>
+      </div>`;
+    }).join('') : '<p class="hint">Aucun mot ne correspond à ce filtre.</p>';
+
+    const countHTML = `<p class="hint">${results.length} mot${results.length > 1 ? 's' : ''}</p>`;
+
+    return `
+      <div class="rules-box words-box">
+        <h3>Gérer les mots</h3>
+        <p class="hint">Vos ajouts/retraits sont enregistrés dans l'app, mais n'existent pas dans le fichier <code>data/words.js</code> tant que vous ne l'avez pas remplacé.</p>
+        <div class="word-export-actions">
+          <button class="btn btn-secondary" data-action="export-words">💾 Exporter la liste (words.js)</button>
+          ${(custom.length || removed.length) ? `<button class="btn-link" data-action="reset-word-overrides">Effacer mes ajustements (après export)</button>` : ''}
+        </div>
+        <p class="hint">Filtrez la liste ci-dessous, ou tapez un mot pour l'ajouter s'il n'existe pas encore.</p>
+        <div class="word-filters">${filterButtonsHTML}</div>
+        <input type="text" class="player-name word-search" placeholder="Filtrer ou ajouter un mot…" value="${esc(rawQuery)}" maxlength="24" />
+        ${addSuggestionHTML}
+        ${verbsNoticeHTML}
+        ${countHTML}
+        <div class="word-results">${rowsHTML}</div>
       </div>`;
   }
 
@@ -251,6 +382,91 @@
     render();
   }
 
+  function addWordAction(word) {
+    const w = normalizeWord(word);
+    if (!w || !Storage.loadCustomWords || !Storage.saveCustomWords) return;
+    const custom = Storage.loadCustomWords();
+    if (!custom.includes(w)) {
+      custom.push(w);
+      Storage.saveCustomWords(custom);
+    }
+    // si le mot avait été retiré du dictionnaire de base, on annule ce retrait
+    if (Storage.loadRemovedWords && Storage.saveRemovedWords) {
+      const removed = Storage.loadRemovedWords().filter((x) => x !== w);
+      Storage.saveRemovedWords(removed);
+    }
+    state.wordFilterQuery = '';
+    render();
+  }
+
+  function removeCustomWordAction(word) {
+    if (!Storage.loadCustomWords || !Storage.saveCustomWords) return;
+    const custom = Storage.loadCustomWords().filter((w) => w !== word);
+    Storage.saveCustomWords(custom);
+    render();
+  }
+
+  function excludeWordAction(word) {
+    const w = normalizeWord(word);
+    if (!w || !Storage.loadRemovedWords || !Storage.saveRemovedWords) return;
+    const removed = Storage.loadRemovedWords();
+    if (!removed.includes(w)) {
+      removed.push(w);
+      Storage.saveRemovedWords(removed);
+    }
+    render();
+  }
+
+  function restoreWordAction(word) {
+    if (!Storage.loadRemovedWords || !Storage.saveRemovedWords) return;
+    const removed = Storage.loadRemovedWords().filter((w) => w !== word);
+    Storage.saveRemovedWords(removed);
+    render();
+  }
+
+  /** Retire d'un coup tous les mots du dictionnaire actuellement filtrés (ex: tous les verbes conjugués détectés). */
+  function excludeAllFilteredAction() {
+    if (!Storage.loadRemovedWords || !Storage.saveRemovedWords) return;
+    const toRemove = getFilteredWords().filter((it) => it.status === 'dictionary').map((it) => it.word);
+    if (!toRemove.length) return;
+    const removed = Storage.loadRemovedWords();
+    toRemove.forEach((w) => { if (!removed.includes(w)) removed.push(w); });
+    Storage.saveRemovedWords(removed);
+    render();
+  }
+
+  /**
+   * Génère un nouveau data/words.js à partir du dictionnaire de base + ajouts - retraits,
+   * et déclenche son téléchargement. L'app ne peut pas écrire sur le disque du projet :
+   * il faut remplacer manuellement le fichier data/words.js par celui téléchargé.
+   */
+  function exportWordsAction() {
+    const list = Array.from(new Set(getWordList())).sort((a, b) => a.localeCompare(b, 'fr'));
+    const header = `// Dictionnaire de mots français communs (${list.length} mots).\n`
+      + `// Exporté depuis So lover (mots ajoutés/retirés via le panneau « Gérer les mots »),\n`
+      + `// à partir du dictionnaire FrequencyWords (hermitdave, licence MIT), filtré et nettoyé.\n`
+      + `// Ne pas éditer à la main : régénérez via l'app ou tools/build-words.js si besoin.\n`;
+    const body = `const WORDS = ${JSON.stringify(list)};\n`;
+    const blob = new Blob([header + body], { type: 'text/javascript' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'words.js';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  /** Efface les ajouts/retraits enregistrés dans l'app, une fois qu'ils ont été intégrés au data/words.js exporté. */
+  function resetWordOverridesAction() {
+    const ok = window.confirm('Effacer les mots ajoutés/retirés enregistrés dans cette app ?\n\nÀ faire seulement après avoir remplacé data/words.js par le fichier exporté, sinon vos ajustements seront perdus.');
+    if (!ok) return;
+    if (Storage.saveCustomWords) Storage.saveCustomWords([]);
+    if (Storage.saveRemovedWords) Storage.saveRemovedWords([]);
+    render();
+  }
+
   function startGame() {
     const names = state.players.map((n, i) => (n.trim() ? n.trim() : `Joueur ${i + 1}`));
     if (names.length < MIN_PLAYERS || names.length > MAX_PLAYERS) return;
@@ -267,7 +483,7 @@
       finishGame();
       return;
     }
-    state.round = Game.generateRound(WORDS);
+    state.round = Game.generateRound(getWordList());
     state.clues = ['', '', '', ''];
     state.screen = 'transition';
     state.nextScreenAfterTransition = 'cluegiver';
@@ -286,7 +502,7 @@
 
   /** Ne concerne qu'une seule tuile (les indices déjà donnés pour ses 2 bords sont réinitialisés). */
   function rerollTileAction(slotIndex) {
-    Game.rerollTile(state.round, WORDS, slotIndex);
+    Game.rerollTile(state.round, getWordList(), slotIndex);
     SLOT_EDGES[slotIndex].forEach((edgeIndex) => { state.clues[edgeIndex] = ''; });
     render();
   }
@@ -628,6 +844,15 @@
       case 'remove-player': return removePlayer(Number(el.dataset.index));
       case 'start-game': return startGame();
       case 'toggle-rules': state.rulesOpen = !state.rulesOpen; return render();
+      case 'toggle-words': state.wordsPanelOpen = !state.wordsPanelOpen; if (!state.wordsPanelOpen) state.wordFilterQuery = ''; return render();
+      case 'set-word-filter': state.wordFilterStatus = el.dataset.filter; return render();
+      case 'add-word': return addWordAction(el.dataset.word);
+      case 'remove-custom-word': return removeCustomWordAction(el.dataset.word);
+      case 'exclude-word': return excludeWordAction(el.dataset.word);
+      case 'restore-word': return restoreWordAction(el.dataset.word);
+      case 'exclude-all-filtered': return excludeAllFilteredAction();
+      case 'export-words': return exportWordsAction();
+      case 'reset-word-overrides': return resetWordOverridesAction();
       case 'reveal': return reveal();
       case 'reroll-tile': return rerollTileAction(Number(el.dataset.slot));
       case 'validate-clues': return validateClues();
@@ -647,12 +872,15 @@
   document.addEventListener('pointercancel', onPointerCancel);
 
   app.addEventListener('input', (e) => {
-    if (e.target.classList.contains('player-name')) {
+    if (e.target.classList.contains('player-name') && e.target.dataset.index !== undefined) {
       state.players[Number(e.target.dataset.index)] = e.target.value;
     } else if (e.target.classList.contains('clue-input')) {
       updateClue(Number(e.target.dataset.index), e.target.value);
       const btn = app.querySelector('[data-action="validate-clues"]');
       if (btn) btn.disabled = !state.clues.every((c) => c.trim().length > 0);
+    } else if (e.target.classList.contains('word-search')) {
+      state.wordFilterQuery = e.target.value;
+      render();
     }
   });
 
@@ -666,4 +894,3 @@
     });
   }
 })();
-

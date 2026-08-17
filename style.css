@@ -34,9 +34,27 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
+  background: transparent;
   color: var(--text);
   min-height: 100%;
+  position: relative;
+}
+
+/* Cœur rouge en fond, sur tous les écrans du jeu */
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath fill='%23c0392b' d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: min(90vw, 90vh) min(90vw, 90vh);
+  opacity: 0.18;
+  z-index: -1;
+  pointer-events: none;
 }
 
 #app {
@@ -174,6 +192,120 @@ h2 {
   color: var(--green-dark);
 }
 
+.rules-box h4 {
+  margin: 14px 0 6px;
+  color: var(--green-dark);
+  font-size: 0.9rem;
+}
+
+.word-export-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.word-export-actions .btn-secondary {
+  width: auto;
+  margin: 0;
+}
+
+.word-export-actions .btn-link {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.word-search-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  color: #4a5c50;
+  margin: 8px 0;
+}
+
+.word-chip {
+  display: flex;
+  align-items: center;
+}
+
+.word-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.btn-filter {
+  width: auto;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.btn-bulk {
+  width: auto;
+  display: inline-block;
+  margin: 4px 0 8px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+}
+
+.word-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 4px 6px;
+  max-height: 340px;
+  overflow-y: auto;
+  margin-top: 6px;
+  padding-right: 2px;
+}
+
+.word-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  background: white;
+  border: 1px solid #cfe3d6;
+  border-radius: 6px;
+  padding: 3px 4px 3px 8px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  overflow: hidden;
+}
+
+.word-cell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.word-cell--custom {
+  border-color: var(--green);
+  background: var(--green-light);
+}
+
+.word-cell--removed {
+  border-color: #e3b7ae;
+  background: #fdf1ef;
+}
+
+.word-cell-btn {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--red);
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 2px 3px;
+  cursor: pointer;
+}
+
 /* Transitions */
 
 .screen-transition {
@@ -200,6 +332,23 @@ h2 {
   gap: 6px;
   max-width: 460px;
   margin: 16px auto;
+  position: relative;
+}
+
+.board::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  margin: auto;
+  width: 90%;
+  height: 90%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath fill='%23c0392b' d='M23.6 0c-3.4 0-6.3 2-7.6 4.9C14.7 2 11.8 0 8.4 0 3.8 0 0 3.8 0 8.4c0 9.4 9.5 11.9 16 21.2 6.2-9.3 16-12.1 16-21.2C32 3.8 28.2 0 23.6 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  opacity: 0.18;
+  pointer-events: none;
 }
 
 .edge-top {
@@ -304,8 +453,8 @@ h2 {
   word-break: break-word;
 
   transform: none;
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
 }
 
 /* Input gauche : sens inversé (bas → haut) */
@@ -416,10 +565,17 @@ h2 {
   cursor: grab;
 }
 
-.clover-cell.drag-over .tile-face,
-.clover-cell.drag-over .empty-slot {
+.clover-cell.drag-over .tile-face {
   border-color: var(--gold);
   background: #fff8e6;
+}
+
+.clover-cell.drag-over .empty-slot {
+  background: #fff8e6;
+}
+
+.clover-cell.drag-over .empty-slot::before {
+  background-color: var(--gold);
 }
 
 .clover-cell.locked .tile-face {
@@ -452,10 +608,25 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px dashed #b8d4c2;
   border-radius: 12px;
-  font-size: 2rem;
-  color: #b8d4c2;
+  font-size: 0;
+  color: transparent;
+  position: relative;
+}
+
+.clover-cell.empty .empty-slot::before {
+  content: "";
+  width: 44%;
+  height: 44%;
+  background-color: #ff2d2d;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 .side {
