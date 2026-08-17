@@ -2,7 +2,6 @@
 'use strict';
 
 (function () {
-  const CORNER_NAMES = Game.BOARD_EDGES.map((e) => e.name);
   // Côtés de chaque tuile qui forment un couple avec la tuile voisine (mots tournés
   // vers l'extérieur du plateau, cf. Game.BOARD_EDGES). Dérivé automatiquement.
   const EXTERIOR_SIDES = [new Set(), new Set(), new Set(), new Set()];
@@ -67,6 +66,7 @@
       wordsPanelOpen: false,
       wordFilterQuery: '',
       wordFilterStatus: 'custom',
+      boardRotation: 0,
     };
   }
 
@@ -132,12 +132,19 @@
   function cloverHTML(arrangement, opts) {
     opts = opts || {};
     const lockedSlots = opts.lockedSlots || [false, false, false, false];
+    const rotation = opts.rotation || 0;
     let cells = '';
     for (let i = 0; i < 4; i++) {
+      // La case reste identifiée par sa position logique i (data-slot) pour toute la logique
+      // du jeu ; seule sa position visuelle (classe slot-N) tourne avec le plateau.
+      const displayPos = (i + rotation) % 4;
       const cell = arrangement[i];
       const locked = lockedSlots[i];
       if (cell) {
-        const words = Game.wordsAt(cell.tile, cell.rotation);
+        // On compense la rotation du plateau par une rotation égale de la tuile elle-même
+        // (comme si tout l'objet physique tournait d'un bloc) : les mêmes couples de mots
+        // restent ainsi adjacents, seule leur position à l'écran change.
+        const words = Game.wordsAt(cell.tile, (cell.rotation + rotation) % 4);
         let centerHTML = '';
         if (locked) {
           centerHTML = '<span class="lock-icon" title="Bonne tuile, verrouillée">🔒</span>';
@@ -146,11 +153,11 @@
         } else if (opts.tileReroll) {
           centerHTML = `<button class="rotate-btn reroll-tile-btn" data-action="reroll-tile" data-slot="${i}" title="Retirer cette tuile et en tirer une autre">🎲</button>`;
         }
-        cells += `<div class="clover-cell slot-${i}${opts.interactive && !locked ? ' clickable' : ''}${locked ? ' locked' : ''}" data-slot="${i}">
-          ${tileFaceHTML(words, EXTERIOR_SIDES[i], { centerHTML })}
+        cells += `<div class="clover-cell slot-${displayPos}${opts.interactive && !locked ? ' clickable' : ''}${locked ? ' locked' : ''}" data-slot="${i}">
+          ${tileFaceHTML(words, EXTERIOR_SIDES[displayPos], { centerHTML })}
         </div>`;
       } else {
-        cells += `<div class="clover-cell slot-${i} empty${opts.interactive ? ' clickable' : ''}" data-slot="${i}">
+        cells += `<div class="clover-cell slot-${displayPos} empty${opts.interactive ? ' clickable' : ''}" data-slot="${i}">
           <div class="empty-slot">+</div>
         </div>`;
       }
@@ -160,12 +167,17 @@
 
   /** Assemble le trèfle avec ses 4 indices/mots positionnés directement sur les bords du plateau. */
   function boardHTML(arrangement, opts, edgesHTML) {
+    opts = opts || {};
+    const rotation = opts.rotation || 0;
+    // Le bord affiché en haut/droite/bas/gauche dépend de la rotation : on ne change pas les
+    // indices logiques (state.clues), seulement leur emplacement visuel sur le plateau.
+    const at = (displayPos) => edgesHTML[(displayPos - rotation + 4) % 4];
     return `
       <div class="board">
-        <div class="edge edge-top">${edgesHTML[0]}</div>
-        <div class="edge edge-right">${edgesHTML[1]}</div>
-        <div class="edge edge-bottom">${edgesHTML[2]}</div>
-        <div class="edge edge-left">${edgesHTML[3]}</div>
+        <div class="edge edge-top">${at(0)}</div>
+        <div class="edge edge-right">${at(1)}</div>
+        <div class="edge edge-bottom">${at(2)}</div>
+        <div class="edge edge-left">${at(3)}</div>
         ${cloverHTML(arrangement, opts)}
       </div>`;
   }
@@ -222,9 +234,9 @@
     return `
       <div class="rules-box">
         <h3>Règles</h3>
-        <p>Un trèfle à 4 cases reçoit 4 tuiles tirées au hasard, chacune portant 4 mots (un par face). Sur chacun des 4 bords du plateau, les mots extérieurs de deux tuiles voisines se retrouvent côte à côte : c'est une paire.</p>
+        <p>Un cœur à 4 cases reçoit 4 tuiles tirées au hasard, chacune portant 4 mots (un par face). Sur chacun des 4 bords du plateau, les mots extérieurs de deux tuiles voisines se retrouvent côte à côte : c'est une paire.</p>
         <p>Le donneur d'indices de la manche voit la disposition secrète et propose un indice (un mot ou une courte expression) pour chacune des 4 paires, directement sur le bord concerné.</p>
-        <p>Les autres joueurs récupèrent les 4 tuiles (mélangées et retournées au hasard) <strong>+ une 5<sup>e</sup> tuile piège</strong>, et doivent replacer les bonnes tuiles dans le bon sens sur le trèfle à l'aide des 4 indices.</p>
+        <p>Les autres joueurs récupèrent les 4 tuiles (mélangées et retournées au hasard) <strong>+ une 5<sup>e</sup> tuile piège</strong>, et doivent replacer les bonnes tuiles dans le bon sens sur le cœur à l'aide des 4 indices.</p>
         <p>Chaque joueur est donneur d'indices une fois. Le score de l'équipe est le total des paires correctement reconstituées sur toutes les manches.</p>
       </div>`;
   }
@@ -289,11 +301,27 @@
       </div>`;
   }
 
+  /** Barre de navigation affichée en haut des écrans de jeu (accueil), sauf sur l'écran d'accueil lui-même. */
+  function navBarHTML() {
+    return `<div class="nav-bar"><button class="nav-home" data-action="go-home" title="Retour à l'accueil">🏠 Accueil</button></div>`;
+  }
+
+  /** Boutons pour faire pivoter tout le plateau (visuel uniquement), pour amener un indice en haut. */
+  function rotateBoardControlsHTML() {
+    return `
+      <div class="rotate-board-controls">
+        <button class="rotate-board-btn" data-action="rotate-board-left" title="Pivoter le plateau vers la gauche">⟲</button>
+        <span class="hint">Pivoter le plateau</span>
+        <button class="rotate-board-btn" data-action="rotate-board-right" title="Pivoter le plateau vers la droite">⟳</button>
+      </div>`;
+  }
+
   function renderTransition() {
     const clueGiver = state.players[state.roundIndex % state.players.length];
     const forGuess = state.nextScreenAfterTransition === 'guess';
     app.innerHTML = `
       <section class="screen screen-transition">
+        ${navBarHTML()}
         <h2>Manche ${state.roundIndex + 1} / ${state.players.length}</h2>
         ${forGuess
           ? `<p class="transition-text">Passe l'appareil à tout le monde <strong>sauf ${esc(clueGiver)}</strong>.<br>Vous allez recevoir les indices et devoir replacer les tuiles.</p>`
@@ -309,8 +337,10 @@
       <input type="text" class="clue-input" data-index="${i}" placeholder="Indice…" value="${esc(c)}" maxlength="40" />`);
     app.innerHTML = `
       <section class="screen screen-cluegiver">
+        ${navBarHTML()}
         <h2>${esc(clueGiver)}, donne un indice par paire</h2>
-        ${boardHTML(state.round.solutionArrangement, { interactive: false, tileReroll: true }, edgesHTML)}
+        ${rotateBoardControlsHTML()}
+        ${boardHTML(state.round.solutionArrangement, { interactive: false, tileReroll: true, rotation: state.boardRotation }, edgesHTML)}
         <p class="hint">Un mot ne te convient pas ? Touche 🎲 sur sa tuile pour n'en retirer qu'une seule.</p>
         <div class="cluegiver-actions">
           <button class="btn btn-primary btn-large" data-action="validate-clues" ${cluesReady ? '' : 'disabled'}>Indices prêts →</button>
@@ -322,12 +352,14 @@
     const allFilled = state.guess.slots.every((s) => s !== null);
     const cloverArrangement = state.guess.slots.map((s) => (s ? { tile: findTile(state.round, s.tileId), rotation: s.rotation } : null));
     const feedback = state.lastResult ? state.lastResult.perCorner : null;
-    const edgesHTML = state.clues.map((c, i) => `<div class="edge-clue"><strong>${CORNER_NAMES[i]}</strong>${esc(c)}${feedback ? (feedback[i] ? ' ✅' : ' ❌') : ''}</div>`);
+    const edgesHTML = state.clues.map((c, i) => `<div class="edge-clue">${esc(c)}${feedback ? (feedback[i] ? ' ✅' : ' ❌') : ''}</div>`);
     app.innerHTML = `
       <section class="screen screen-guess">
-        <h2>Manche ${state.roundIndex + 1} : reconstituez le trèfle</h2>
-        ${boardHTML(cloverArrangement, { interactive: true, lockedSlots: state.guess.lockedSlots }, edgesHTML)}
-        <p class="hint">Glissez une tuile vers une case du trèfle (ou touchez-la puis touchez la case). Les tuiles mal placées reviendront au plateau après vérification.</p>
+        ${navBarHTML()}
+        <h2>Manche ${state.roundIndex + 1} : reconstituez le cœur</h2>
+        ${rotateBoardControlsHTML()}
+        ${boardHTML(cloverArrangement, { interactive: true, lockedSlots: state.guess.lockedSlots, rotation: state.boardRotation }, edgesHTML)}
+        <p class="hint">Glissez une tuile vers une case du cœur (ou touchez-la puis touchez la case). Les tuiles mal placées reviendront au plateau après vérification.</p>
         ${trayHTML(state.round, state.guess)}
         <button class="btn btn-primary btn-large" data-action="check-guess" ${allFilled ? '' : 'disabled'}>Vérifier la solution</button>
       </section>`;
@@ -336,6 +368,7 @@
   function renderResult() {
     app.innerHTML = `
       <section class="screen screen-result">
+        ${navBarHTML()}
         <h2>Manche ${state.roundIndex + 1} résolue !</h2>
         <p class="round-score">${state.guess.attempts} essai${state.guess.attempts > 1 ? 's' : ''} — ${state.lastRoundScore} / 4 points</p>
         <p class="total-score">Score total : ${state.totalScore} / ${state.maxScore}</p>
@@ -347,6 +380,7 @@
     const rating = Game.rateScore(state.totalScore, state.maxScore);
     app.innerHTML = `
       <section class="screen screen-final">
+        ${navBarHTML()}
         <h2>Partie terminée !</h2>
         <p class="final-emoji">${rating.emoji}</p>
         <p class="final-label">${rating.label}</p>
@@ -541,9 +575,9 @@
   /** Petit décalage/rotation aléatoire pour donner un effet de tuiles éparpillées « en vrac ». */
   function randomScatter() {
     return {
-      dx: Math.round(Math.random() * 20 - 10),
-      dy: Math.round(Math.random() * 16 - 8),
-      rot: Math.round(Math.random() * 28 - 14),
+      dx: Math.round(Math.random() * 34 - 17),
+      dy: Math.round(Math.random() * 26 - 20),
+      rot: Math.round(Math.random() * 32 - 16),
     };
   }
 
@@ -679,6 +713,27 @@
 
   function newGame() {
     state = freshState();
+    render();
+  }
+
+  /** Retour à l'accueil depuis un écran de jeu, avec confirmation si une partie est en cours. */
+  function goHomeAction() {
+    const midGame = ['transition', 'cluegiver', 'guess', 'result'].includes(state.screen);
+    if (midGame) {
+      const ok = window.confirm('Quitter la partie en cours et revenir à l\'accueil ?\n\nLa progression de cette partie sera perdue.');
+      if (!ok) return;
+    }
+    newGame();
+  }
+
+  /** Fait pivoter tout le plateau (visuel uniquement, la logique de jeu ne change pas). */
+  function rotateBoardLeft() {
+    state.boardRotation = (state.boardRotation + 3) % 4;
+    render();
+  }
+
+  function rotateBoardRight() {
+    state.boardRotation = (state.boardRotation + 1) % 4;
     render();
   }
 
@@ -862,6 +917,9 @@
       case 'continue-after-result': return continueAfterResult();
       case 'replay-same': return replaySamePlayers();
       case 'new-game': return newGame();
+      case 'go-home': return goHomeAction();
+      case 'rotate-board-left': return rotateBoardLeft();
+      case 'rotate-board-right': return rotateBoardRight();
       default: return;
     }
   });
