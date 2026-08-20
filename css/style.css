@@ -43,25 +43,64 @@ body {
 
 /* Cœur rouge en fond, sur tous les écrans du jeu */
 
-body::before {
+body::before,
+body::after {
   content: "";
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath fill='%23c0392b' d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: min(90vw, 90vh) min(90vw, 90vh);
-  opacity: 0.18;
-  z-index: -1;
+  margin: auto;
+  width: min(90vw, 90vh, 460px);
+  height: min(90vw, 90vh, 460px);
+  transition: transform 0.35s ease;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
   pointer-events: none;
+}
+
+/* Tranche épaisse du plateau : copie du cœur, bien plus sombre et nettement décalée */
+body::after {
+  z-index: -2;
+  background: #5e150d;
+  transform: rotate(var(--board-rotation-deg, 0deg)) translateY(14px);
+}
+
+/* Face visible du plateau : dégradé plastique + ombre marquée qui suit le contour du cœur */
+body::before {
+  z-index: -1;
+  background: linear-gradient(150deg, #ff9a8c 0%, #e5493a 30%, var(--red) 60%, #8a2016 100%);
+  filter: drop-shadow(0 12px 14px rgba(0, 0, 0, 0.35)) drop-shadow(0 -2px 0 rgba(255, 255, 255, 0.4));
+  transform: rotate(var(--board-rotation-deg, 0deg));
+}
+
+/* Sur les écrans avec un plateau (.board), le cœur de fond ci-dessus (fixe au viewport) est
+   désactivé au profit d'un cœur porté par .board lui-même (voir plus bas dans le fichier,
+   règles .board::before/::after) : ainsi il défile avec la page et reste bien aligné avec le
+   plateau quand on scrolle pour voir les tuiles, au lieu de rester figé à l'écran. */
+body:has(.board)::before,
+body:has(.board)::after {
+  content: none;
 }
 
 #app {
   max-width: 640px;
   margin: 0 auto;
-  padding: 16px 16px 48px;
+  padding: 10px 12px 24px;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Les champs de saisie restent normalement sélectionnables/éditables malgré la règle ci-dessus */
+#app input {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* Titres */
@@ -75,6 +114,7 @@ h1 {
 h2 {
   text-align: center;
   color: var(--green-dark);
+  margin: 6px 0;
 }
 
 .subtitle {
@@ -89,13 +129,23 @@ h2 {
   font-weight: 600;
 }
 
+.error-banner {
+  background: #fdecea;
+  border: 2px solid #d9534f;
+  color: #7a2018;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
 /* Boutons */
 
 .btn {
   display: block;
   width: 100%;
-  padding: 12px 16px;
-  margin: 10px 0;
+  padding: 10px 16px;
+  margin: 6px 0;
   border: none;
   border-radius: var(--radius);
   font-size: 1rem;
@@ -326,30 +376,6 @@ h2 {
   cursor: pointer;
 }
 
-.rotate-board-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin: 4px 0 10px;
-}
-
-.rotate-board-btn {
-  width: 40px;
-  height: 40px;
-  flex: none;
-  border-radius: 50%;
-  border: 2px solid var(--green);
-  background: white;
-  color: var(--green-dark);
-  font-size: 1.3rem;
-  cursor: pointer;
-}
-
-.rotate-board-btn:active {
-  transform: scale(0.95);
-}
-
 /* Transitions */
 
 .screen-transition {
@@ -371,28 +397,99 @@ h2 {
   grid-template-areas:
     ". top ."
     "left clover right"
-    ". bottom .";
+    "home bottom verify";
   align-items: center;
   gap: 6px;
-  max-width: 460px;
-  margin: 16px auto;
+  /* Même formule de taille que le cœur en fond (body::before/::after) afin que la zone
+     cliquable du plateau couvre bien tout le cœur visible, y compris ses bords/pointes : sinon
+     le double-clic sur les bords du cœur (en dehors du petit rectangle 460px) ne déclenchait
+     rien. */
+  width: min(90vw, 90vh, 460px);
+  aspect-ratio: 1 / 1;
+  margin: 24px auto;
   position: relative;
+  transform: rotate(var(--board-rotation-deg, 0deg));
+  transition: transform 0.35s ease;
 }
 
-.board::before {
+/* Accueil / Vérifier, de chaque côté de la pointe basse du cœur */
+.board-corner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.board-corner-home {
+  grid-area: home;
+}
+
+.board-corner-verify {
+  grid-area: verify;
+}
+
+.corner-btn {
+  width: 100%;
+  border-radius: var(--radius);
+  padding: 10px 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+}
+
+.corner-btn-home {
+  background: white;
+  color: var(--green-dark);
+  border: 2px solid var(--green);
+  font-size: 1.2rem;
+}
+
+.corner-btn-verify {
+  background: var(--green);
+  color: white;
+  border: none;
+}
+
+.corner-btn-verify:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.corner-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+/* Cœur porté directement par le plateau (au lieu d'un fond fixe au viewport) : il défile donc
+   naturellement avec la page et reste aligné avec .board quand on scrolle pour voir les tuiles.
+   Il hérite automatiquement de la rotation posée sur .board (pas besoin de la répéter ici). */
+.board::before,
+.board::after {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: -1;
-  margin: auto;
-  width: 90%;
-  height: 90%;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath fill='%23c0392b' d='M23.6 0c-3.4 0-6.3 2-7.6 4.9C14.7 2 11.8 0 8.4 0 3.8 0 0 3.8 0 8.4c0 9.4 9.5 11.9 16 21.2 6.2-9.3 16-12.1 16-21.2C32 3.8 28.2 0 23.6 0z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
-  opacity: 0.18;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
   pointer-events: none;
+}
+
+/* Tranche épaisse du plateau : copie du cœur, bien plus sombre et nettement décalée */
+.board::after {
+  z-index: -2;
+  background: #5e150d;
+  transform: translateY(14px);
+}
+
+/* Face visible du plateau : dégradé plastique + ombre marquée qui suit le contour du cœur */
+.board::before {
+  z-index: -1;
+  background: linear-gradient(150deg, #ff9a8c 0%, #e5493a 30%, var(--red) 60%, #8a2016 100%);
+  filter: drop-shadow(0 12px 14px rgba(0, 0, 0, 0.35)) drop-shadow(0 -2px 0 rgba(255, 255, 255, 0.4));
 }
 
 .edge-top {
@@ -605,6 +702,7 @@ h2 {
 .clover-cell {
   aspect-ratio: 1;
   touch-action: none;
+  position: relative;
 }
 
 .clover-cell.clickable {
@@ -617,7 +715,7 @@ h2 {
   box-shadow: 0 0 0 3px rgba(28, 43, 34, 0.18);
 }
 
-.clover-cell.drag-over .empty-slot::before {
+.clover-cell.empty.drag-over::before {
   transform: scale(1.12);
 }
 
@@ -626,8 +724,48 @@ h2 {
   box-shadow: 0 0 0 3px rgba(212, 160, 23, 0.25);
 }
 
+.clover-cell.selected .tile-face {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(212, 160, 23, 0.35);
+}
+
 .lock-icon {
   font-size: 1rem;
+}
+
+/* Petit cœur du plateau, au centre de chaque case : toujours présent (posée ou vide), derrière
+   la tuile — c'est lui qui apparaît dans le trou en forme de cœur découpé au centre des tuiles
+   (voir .tile-face plus bas), comme si la tuile s'emboîtait dessus. */
+.clover-cell::before,
+.clover-cell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 44%;
+  height: 44%;
+  z-index: 0;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+/* Tranche épaisse : copie plus sombre et nettement décalée sous le petit cœur */
+.clover-cell::after {
+  z-index: -1;
+  background: #8a1610;
+  transform: translateY(5px);
+}
+
+/* Face visible : dégradé plastique + ombre marquée qui suit le contour du petit cœur */
+.clover-cell::before {
+  background: linear-gradient(150deg, #ff9a8c 0%, #ff2d2d 42%, #c21f1f 100%);
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.35)) drop-shadow(0 -1px 0 rgba(255, 255, 255, 0.45));
 }
 
 /* Tuiles */
@@ -638,11 +776,31 @@ h2 {
   display: grid;
   grid-template-columns: 1fr 2fr 1fr;
   grid-template-rows: 1fr 2fr 1fr;
-  background: white;
+  position: relative;
+  z-index: 1;
+  background: radial-gradient(120% 120% at 30% 15%, #fffdf8 0%, #f4ecd8 55%, #e6d9ba 100%);
   border: 2px solid var(--green);
   border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 3px 5px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -3px 4px rgba(0, 0, 0, 0.1);
+  /* Trou en forme de cœur au centre : la tuile (rectangle plein) moins la forme du cœur, pour
+     un effet « découpe dans le carton » qui s'emboîte sur le petit cœur du plateau ci-dessus. */
+  -webkit-mask-image:
+    linear-gradient(#000, #000),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: no-repeat, no-repeat;
+  -webkit-mask-position: center, center;
+  -webkit-mask-size: 100% 100%, 30% 30%;
+  -webkit-mask-composite: destination-out;
+  mask-image:
+    linear-gradient(#000, #000),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  mask-repeat: no-repeat, no-repeat;
+  mask-position: center, center;
+  mask-size: 100% 100%, 30% 30%;
+  mask-composite: subtract;
 }
 
 .clover-cell.empty .empty-slot {
@@ -655,21 +813,7 @@ h2 {
   font-size: 0;
   color: transparent;
   position: relative;
-}
-
-.clover-cell.empty .empty-slot::before {
-  content: "";
-  width: 44%;
-  height: 44%;
-  background-color: #ff2d2d;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-size: contain;
-  mask-size: contain;
+  z-index: 1;
 }
 
 .side {
@@ -726,9 +870,9 @@ h2 {
   justify-content: center;
 }
 
-/* Boutons des tuiles */
+/* Boutons au centre d'une tuile (uniquement le dé de retirage côté donneur d'indices) */
 
-.rotate-btn {
+.tile-center-btn {
   width: 30px;
   height: 30px;
   background: var(--green);
@@ -759,29 +903,29 @@ h2 {
   opacity: 0.35;
 }
 
-.tray.drag-over {
-  border-radius: var(--radius);
-  box-shadow: inset 0 0 0 2px rgba(28, 43, 34, 0.18);
-}
-
 /* Plateau de tuiles disponibles */
 
 .tray {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
+  flex-wrap: nowrap;
+  gap: 18px;
   justify-content: center;
-  margin: -18px 0 20px;
-  padding: 24px 12px 12px;
+  justify-content: safe center;
+  margin: 0 calc(50% - 50vw) 12px;
+  width: 100vw;
+  padding: 24px 24px 32px;
   position: relative;
   z-index: 1;
+  overflow-x: auto;
 }
 
 .tray-tile {
   width: var(--tile-size);
   height: var(--tile-size);
+  flex: none;
   cursor: grab;
   touch-action: none;
+  position: relative;
 }
 
 .tray-tile.selected {
@@ -801,12 +945,6 @@ h2 {
   opacity: 1;
   color: var(--green-dark);
   font-size: 0.62rem;
-}
-
-.tray-tile .rotate-btn {
-  width: 26px;
-  height: 26px;
-  font-size: 0.9rem;
 }
 
 /* Résultats */
