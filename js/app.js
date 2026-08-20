@@ -19,6 +19,11 @@
   const MAX_PLAYERS = 8;
   const WORD_RE = /^[a-zàâäéèêëïîôöùûüçœæ'-]+$/i;
 
+  // Dictionnaire de base, chargé de façon asynchrone depuis data/words.json au démarrage
+  // (voir tout en bas, section "Démarrage") — modifiable directement, ce fichier n'étant que
+  // du JSON pur (pas de JS autour à respecter).
+  let WORDS = [];
+
   // Terminaisons de conjugaison assez spécifiques pour repérer un verbe conjugué avec peu
   // de faux positifs (on évite volontairement les terminaisons trop courtes/ambiguës comme
   // "e", "es", "ent" seules, très fréquentes aussi dans des noms/adjectifs).
@@ -55,8 +60,9 @@
       roundIndex: 0,
       round: null,
       clues: ['', '', '', ''],
-      guess: { slots: [null, null, null, null], tray: [], trayScatter: {}, tileRotations: {}, lockedSlots: [false, false, false, false], attempts: 0 },
+      guess: { slots: [null, null, null, null], tray: [], trayScatter: {}, tileRotations: {}, lockedSlots: [false, false, false, false], slotSpin: [0, 0, 0, 0], attempts: 0 },
       selectedTrayTile: null,
+      selectedSlotTile: null,
       lastResult: null,
       scores: [],
       totalScore: 0,
@@ -132,32 +138,29 @@
   function cloverHTML(arrangement, opts) {
     opts = opts || {};
     const lockedSlots = opts.lockedSlots || [false, false, false, false];
-    const rotation = opts.rotation || 0;
+    const slotSpin = opts.slotSpin || [0, 0, 0, 0];
     let cells = '';
     for (let i = 0; i < 4; i++) {
-      // La case reste identifiée par sa position logique i (data-slot) pour toute la logique
-      // du jeu ; seule sa position visuelle (classe slot-N) tourne avec le plateau.
-      const displayPos = (i + rotation) % 4;
       const cell = arrangement[i];
       const locked = lockedSlots[i];
       if (cell) {
-        // On compense la rotation du plateau par une rotation égale de la tuile elle-même
-        // (comme si tout l'objet physique tournait d'un bloc) : les mêmes couples de mots
-        // restent ainsi adjacents, seule leur position à l'écran change.
-        const words = Game.wordsAt(cell.tile, (cell.rotation + rotation) % 4);
+        const words = Game.wordsAt(cell.tile, cell.rotation);
         let centerHTML = '';
         if (locked) {
           centerHTML = '<span class="lock-icon" title="Bonne tuile, verrouillée">🔒</span>';
-        } else if (opts.interactive) {
-          centerHTML = `<button class="rotate-btn" data-action="rotate-slot" data-slot="${i}" title="Tourner">⟳</button>`;
         } else if (opts.tileReroll) {
-          centerHTML = `<button class="rotate-btn reroll-tile-btn" data-action="reroll-tile" data-slot="${i}" title="Retirer cette tuile et en tirer une autre">🎲</button>`;
+          centerHTML = `<button class="tile-center-btn reroll-tile-btn" data-action="reroll-tile" data-slot="${i}" title="Retirer cette tuile et en tirer une autre">🎲</button>`;
         }
-        cells += `<div class="clover-cell slot-${displayPos}${opts.interactive && !locked ? ' clickable' : ''}${locked ? ' locked' : ''}" data-slot="${i}">
-          ${tileFaceHTML(words, EXTERIOR_SIDES[displayPos], { centerHTML })}
+        const selected = opts.selectedSlot === i;
+        // La case (donc le petit cœur qu'elle porte derrière la tuile) reste visuellement à
+        // l'orientation atteinte lors du dernier pivotement, au lieu de revenir à 0° à chaque
+        // rendu : sinon le cœur « se remettait droit » juste après avoir tourné avec la tuile.
+        const spinStyle = ` style="transform: rotate(${(slotSpin[i] || 0) * 90}deg);"`;
+        cells += `<div class="clover-cell slot-${i}${opts.interactive && !locked ? ' clickable' : ''}${locked ? ' locked' : ''}${selected ? ' selected' : ''}" data-slot="${i}"${spinStyle}>
+          ${tileFaceHTML(words, EXTERIOR_SIDES[i], { centerHTML })}
         </div>`;
       } else {
-        cells += `<div class="clover-cell slot-${displayPos} empty${opts.interactive ? ' clickable' : ''}" data-slot="${i}">
+        cells += `<div class="clover-cell slot-${i} empty${opts.interactive ? ' clickable' : ''}" data-slot="${i}">
           <div class="empty-slot">+</div>
         </div>`;
       }
@@ -165,19 +168,18 @@
     return `<div class="clover">${cells}</div>`;
   }
 
-  /** Assemble le trèfle avec ses 4 indices/mots positionnés directement sur les bords du plateau. */
-  function boardHTML(arrangement, opts, edgesHTML) {
-    opts = opts || {};
-    const rotation = opts.rotation || 0;
-    // Le bord affiché en haut/droite/bas/gauche dépend de la rotation : on ne change pas les
-    // indices logiques (state.clues), seulement leur emplacement visuel sur le plateau.
-    const at = (displayPos) => edgesHTML[(displayPos - rotation + 4) % 4];
+  /** Assemble le trèfle avec ses 4 indices/mots positionnés directement sur les bords du plateau.
+   * `cornerButtonsHTML` (optionnel) : { home, verify } placés de chaque côté de la pointe basse
+   * du cœur (uniquement utilisé sur l'écran de devinette). */
+  function boardHTML(arrangement, opts, edgesHTML, cornerButtonsHTML) {
     return `
       <div class="board">
-        <div class="edge edge-top">${at(0)}</div>
-        <div class="edge edge-right">${at(1)}</div>
-        <div class="edge edge-bottom">${at(2)}</div>
-        <div class="edge edge-left">${at(3)}</div>
+        <div class="edge edge-top">${edgesHTML[0]}</div>
+        <div class="edge edge-right">${edgesHTML[1]}</div>
+        <div class="edge edge-bottom">${edgesHTML[2]}</div>
+        <div class="edge edge-left">${edgesHTML[3]}</div>
+        ${cornerButtonsHTML ? `<div class="board-corner board-corner-home">${cornerButtonsHTML.home}</div>` : ''}
+        ${cornerButtonsHTML ? `<div class="board-corner board-corner-verify">${cornerButtonsHTML.verify}</div>` : ''}
         ${cloverHTML(arrangement, opts)}
       </div>`;
   }
@@ -191,7 +193,7 @@
       const scatter = guess.trayScatter[tileId] || { dx: 0, dy: 0, rot: 0 };
       const scatterStyle = selected ? '' : ` style="transform: translate(${scatter.dx}px, ${scatter.dy}px) rotate(${scatter.rot}deg);"`;
       return `<div class="tray-tile${selected ? ' selected' : ''}" data-tile="${tileId}"${scatterStyle}>
-        ${tileFaceHTML(words, new Set(), { centerHTML: `<button class="rotate-btn" data-action="rotate-tray" data-tile="${tileId}" title="Tourner">⟳</button>` })}
+        ${tileFaceHTML(words, new Set(), {})}
       </div>`;
     }).join('')}</div>`;
   }
@@ -207,6 +209,7 @@
     app.innerHTML = `
       <section class="screen screen-setup">
         <h1>🍀 So lover</h1>
+        ${state.wordsLoadError ? '<p class="error-banner">⚠️ Le dictionnaire (data/words.json) n\'a pas pu être chargé. Vérifiez que le fichier existe et que le jeu est servi via un serveur web (pas ouvert directement depuis le disque).</p>' : ''}
         ${best ? `<p class="best-score">Meilleur score : ${best.totalScore}/${best.maxScore} (${Math.round(best.ratio * 100)}%)</p>` : ''}
         <h2>Joueurs (3 à 8)</h2>
         <div class="player-list">${nameInputs}</div>
@@ -286,9 +289,9 @@
     return `
       <div class="rules-box words-box">
         <h3>Gérer les mots</h3>
-        <p class="hint">Vos ajouts/retraits sont enregistrés dans l'app, mais n'existent pas dans le fichier <code>data/words.js</code> tant que vous ne l'avez pas remplacé.</p>
+        <p class="hint">Vos ajouts/retraits sont enregistrés dans l'app, mais n'existent pas dans le fichier <code>data/words.json</code> tant que vous ne l'avez pas remplacé.</p>
         <div class="word-export-actions">
-          <button class="btn btn-secondary" data-action="export-words">💾 Exporter la liste (words.js)</button>
+          <button class="btn btn-secondary" data-action="export-words">💾 Exporter la liste (words.json)</button>
           ${(custom.length || removed.length) ? `<button class="btn-link" data-action="reset-word-overrides">Effacer mes ajustements (après export)</button>` : ''}
         </div>
         <p class="hint">Filtrez la liste ci-dessous, ou tapez un mot pour l'ajouter s'il n'existe pas encore.</p>
@@ -306,16 +309,6 @@
     return `<div class="nav-bar"><button class="nav-home" data-action="go-home" title="Retour à l'accueil">🏠 Accueil</button></div>`;
   }
 
-  /** Boutons pour faire pivoter tout le plateau (visuel uniquement), pour amener un indice en haut. */
-  function rotateBoardControlsHTML() {
-    return `
-      <div class="rotate-board-controls">
-        <button class="rotate-board-btn" data-action="rotate-board-left" title="Pivoter le plateau vers la gauche">⟲</button>
-        <span class="hint">Pivoter le plateau</span>
-        <button class="rotate-board-btn" data-action="rotate-board-right" title="Pivoter le plateau vers la droite">⟳</button>
-      </div>`;
-  }
-
   function renderTransition() {
     const clueGiver = state.players[state.roundIndex % state.players.length];
     const forGuess = state.nextScreenAfterTransition === 'guess';
@@ -324,8 +317,8 @@
         ${navBarHTML()}
         <h2>Manche ${state.roundIndex + 1} / ${state.players.length}</h2>
         ${forGuess
-          ? `<p class="transition-text">Passe l'appareil à tout le monde <strong>sauf ${esc(clueGiver)}</strong>.<br>Vous allez recevoir les indices et devoir replacer les tuiles.</p>`
-          : `<p class="transition-text">Passe l'appareil à <strong>${esc(clueGiver)}</strong>.<br>Les autres ne doivent pas regarder l'écran !</p>`}
+          ? `<p class="transition-text">Passe l'appareil à tout le monde <strong>sauf ${esc(clueGiver)}</strong>.</p>`
+          : `<p class="transition-text">Passe l'appareil à <strong>${esc(clueGiver)}</strong>.</p>`}
         <button class="btn btn-primary btn-large" data-action="reveal">Je suis prêt·e, révéler</button>
       </section>`;
   }
@@ -339,9 +332,7 @@
       <section class="screen screen-cluegiver">
         ${navBarHTML()}
         <h2>${esc(clueGiver)}, donne un indice par paire</h2>
-        ${rotateBoardControlsHTML()}
-        ${boardHTML(state.round.solutionArrangement, { interactive: false, tileReroll: true, rotation: state.boardRotation }, edgesHTML)}
-        <p class="hint">Un mot ne te convient pas ? Touche 🎲 sur sa tuile pour n'en retirer qu'une seule.</p>
+        ${boardHTML(state.round.solutionArrangement, { interactive: false, tileReroll: true }, edgesHTML)}
         <div class="cluegiver-actions">
           <button class="btn btn-primary btn-large" data-action="validate-clues" ${cluesReady ? '' : 'disabled'}>Indices prêts →</button>
         </div>
@@ -353,17 +344,18 @@
     const cloverArrangement = state.guess.slots.map((s) => (s ? { tile: findTile(state.round, s.tileId), rotation: s.rotation } : null));
     const feedback = state.lastResult ? state.lastResult.perCorner : null;
     const edgesHTML = state.clues.map((c, i) => `<div class="edge-clue">${esc(c)}${feedback ? (feedback[i] ? ' ✅' : ' ❌') : ''}</div>`);
+    const cornerButtons = {
+      home: `<button class="corner-btn corner-btn-home" data-action="go-home" title="Retour à l'accueil">🏠</button>`,
+      verify: `<button class="corner-btn corner-btn-verify" data-action="check-guess" ${allFilled ? '' : 'disabled'}>Vérifier</button>`,
+    };
     app.innerHTML = `
       <section class="screen screen-guess">
-        ${navBarHTML()}
         <h2>Manche ${state.roundIndex + 1} : reconstituez le cœur</h2>
-        ${rotateBoardControlsHTML()}
-        ${boardHTML(cloverArrangement, { interactive: true, lockedSlots: state.guess.lockedSlots, rotation: state.boardRotation }, edgesHTML)}
-        <p class="hint">Glissez une tuile vers une case du cœur (ou touchez-la puis touchez la case). Les tuiles mal placées reviendront au plateau après vérification.</p>
+        ${boardHTML(cloverArrangement, { interactive: true, lockedSlots: state.guess.lockedSlots, selectedSlot: state.selectedSlotTile, slotSpin: state.guess.slotSpin }, edgesHTML, cornerButtons)}
         ${trayHTML(state.round, state.guess)}
-        <button class="btn btn-primary btn-large" data-action="check-guess" ${allFilled ? '' : 'disabled'}>Vérifier la solution</button>
       </section>`;
   }
+
 
   function renderResult() {
     app.innerHTML = `
@@ -391,6 +383,7 @@
   }
 
   function render() {
+    applyBoardRotation();
     switch (state.screen) {
       case 'setup': return renderSetup();
       case 'transition': return renderTransition();
@@ -470,31 +463,27 @@
   }
 
   /**
-   * Génère un nouveau data/words.js à partir du dictionnaire de base + ajouts - retraits,
+   * Génère un nouveau data/words.json à partir du dictionnaire de base + ajouts - retraits,
    * et déclenche son téléchargement. L'app ne peut pas écrire sur le disque du projet :
-   * il faut remplacer manuellement le fichier data/words.js par celui téléchargé.
+   * il faut remplacer manuellement le fichier data/words.json par celui téléchargé.
    */
   function exportWordsAction() {
     const list = Array.from(new Set(getWordList())).sort((a, b) => a.localeCompare(b, 'fr'));
-    const header = `// Dictionnaire de mots français communs (${list.length} mots).\n`
-      + `// Exporté depuis So lover (mots ajoutés/retirés via le panneau « Gérer les mots »),\n`
-      + `// à partir du dictionnaire FrequencyWords (hermitdave, licence MIT), filtré et nettoyé.\n`
-      + `// Ne pas éditer à la main : régénérez via l'app ou tools/build-words.js si besoin.\n`;
-    const body = `const WORDS = ${JSON.stringify(list)};\n`;
-    const blob = new Blob([header + body], { type: 'text/javascript' });
+    const body = JSON.stringify(list, null, 2) + '\n';
+    const blob = new Blob([body], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'words.js';
+    a.download = 'words.json';
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
   }
 
-  /** Efface les ajouts/retraits enregistrés dans l'app, une fois qu'ils ont été intégrés au data/words.js exporté. */
+  /** Efface les ajouts/retraits enregistrés dans l'app, une fois qu'ils ont été intégrés au data/words.json exporté. */
   function resetWordOverridesAction() {
-    const ok = window.confirm('Effacer les mots ajoutés/retirés enregistrés dans cette app ?\n\nÀ faire seulement après avoir remplacé data/words.js par le fichier exporté, sinon vos ajustements seront perdus.');
+    const ok = window.confirm('Effacer les mots ajoutés/retirés enregistrés dans cette app ?\n\nÀ faire seulement après avoir remplacé data/words.json par le fichier exporté, sinon vos ajustements seront perdus.');
     if (!ok) return;
     if (Storage.saveCustomWords) Storage.saveCustomWords([]);
     if (Storage.saveRemovedWords) Storage.saveRemovedWords([]);
@@ -566,9 +555,11 @@
       trayScatter,
       tileRotations: rotations,
       lockedSlots: [false, false, false, false],
+      slotSpin: [0, 0, 0, 0],
       attempts: 0,
     };
     state.selectedTrayTile = null;
+    state.selectedSlotTile = null;
     state.lastResult = null;
   }
 
@@ -582,6 +573,7 @@
   }
 
   function selectTrayTile(tileId) {
+    state.selectedSlotTile = null;
     state.selectedTrayTile = state.selectedTrayTile === tileId ? null : tileId;
     render();
   }
@@ -599,6 +591,7 @@
       state.guess.trayScatter[occupant.tileId] = randomScatter();
     }
     state.selectedTrayTile = null;
+    state.selectedSlotTile = null;
   }
 
   /** Échange le contenu de deux cases du trèfle. */
@@ -624,25 +617,89 @@
   function slotClick(slotIndex) {
     if (state.guess.lockedSlots[slotIndex]) return;
     if (state.selectedTrayTile) {
+      // Une tuile du tas est sélectionnée : on la pose ici (échange avec l'occupante éventuelle).
       placeTrayTileInSlot(state.selectedTrayTile, slotIndex);
-    } else if (state.guess.slots[slotIndex]) {
-      removeSlotToTray(slotIndex);
+      render();
+      return;
+    }
+    if (state.selectedSlotTile !== null) {
+      if (state.selectedSlotTile === slotIndex) {
+        // Un second clic sur la tuile déjà sélectionnée la renvoie dans le tas.
+        removeSlotToTray(slotIndex);
+        state.selectedSlotTile = null;
+      } else {
+        // Clic sur une autre case : on déplace/échange la tuile sélectionnée ici.
+        if (state.guess.lockedSlots[state.selectedSlotTile]) { state.selectedSlotTile = null; render(); return; }
+        swapSlots(state.selectedSlotTile, slotIndex);
+        state.selectedSlotTile = null;
+      }
+      render();
+      return;
+    }
+    if (state.guess.slots[slotIndex]) {
+      // Premier clic sur une tuile posée : on la sélectionne, sans la retirer du plateau.
+      state.selectedSlotTile = slotIndex;
     }
     render();
   }
 
-  function rotateTray(tileId) {
-    state.guess.tileRotations[tileId] = ((state.guess.tileRotations[tileId] || 0) + 1) % 4;
-    render();
+  /** Fait pivoter une tuile visuellement (même vitesse/animation que le plateau) avant de
+   * mettre à jour le mot affiché sur chaque face — la rotation change le contenu, pas juste
+   * l'orientation, donc on ne peut pas se contenter d'une simple rotation CSS continue.
+   * `steps` : +1 = un cran vers la droite, -1 = un cran vers la gauche. */
+  function spinTileThen(selector, steps, callback) {
+    const el = app.querySelector(selector);
+    if (!el) {
+      callback();
+      return;
+    }
+    el.style.transition = 'transform 0.35s ease';
+    el.style.transform = `rotate(${steps * 90}deg)`;
+    setTimeout(() => {
+      el.style.transition = '';
+      el.style.transform = '';
+      callback();
+    }, 350);
   }
 
-  function rotateSlot(slotIndex) {
+  function rotateTrayBy(tileId, steps) {
+    spinTileThen(`.tray-tile[data-tile="${tileId}"] .tile-face`, steps, () => {
+      state.guess.tileRotations[tileId] = (((state.guess.tileRotations[tileId] || 0) + steps) % 4 + 4) % 4;
+      render();
+    });
+  }
+
+  /** Recale le compteur d'angle d'une case par multiples de 4 crans (= tours complets), sans
+   * jamais changer l'angle visuel affiché (voir normalizeBoardRotation, même principe). */
+  function normalizeSlotSpin(v) {
+    if (v > 1000) return v - 1000;
+    if (v < -1000) return v + 1000;
+    return v;
+  }
+
+  /** Fait pivoter toute la case (`.clover-cell`) — donc le petit cœur du plateau qu'elle porte
+   * derrière la tuile — depuis son angle actuel (persisté via state.guess.slotSpin, jamais remis
+   * à zéro) jusqu'à son nouvel angle, pour que le cœur ne « redevienne droit » pas juste après
+   * avoir tourné avec la tuile. */
+  function rotateSlotBy(slotIndex, steps) {
     if (state.guess.lockedSlots[slotIndex]) return;
     const cell = state.guess.slots[slotIndex];
     if (!cell) return;
-    cell.rotation = (cell.rotation + 1) % 4;
-    state.guess.tileRotations[cell.tileId] = cell.rotation;
-    render();
+    const el = app.querySelector(`.clover-cell[data-slot="${slotIndex}"]`);
+    const next = (state.guess.slotSpin[slotIndex] || 0) + steps;
+    const finish = () => {
+      state.guess.slotSpin[slotIndex] = normalizeSlotSpin(next);
+      cell.rotation = ((cell.rotation + steps) % 4 + 4) % 4;
+      state.guess.tileRotations[cell.tileId] = cell.rotation;
+      render();
+    };
+    if (!el) {
+      finish();
+      return;
+    }
+    el.style.transition = 'transform 0.35s ease';
+    el.style.transform = `rotate(${next * 90}deg)`;
+    setTimeout(finish, 350);
   }
 
   /**
@@ -727,14 +784,31 @@
   }
 
   /** Fait pivoter tout le plateau (visuel uniquement, la logique de jeu ne change pas). */
+  /** Applique la rotation courante à la variable CSS partagée par le cœur et le plateau,
+   * sans re-rendu : c'est ce qui permet la transition douce sur des éléments déjà en place. */
+  function applyBoardRotation() {
+    document.body.style.setProperty('--board-rotation-deg', `${state.boardRotation * 90}deg`);
+  }
+
+  /** Recale le compteur de rotation par multiples de 4 crans (= tours complets à 360°) pour
+   * qu'il ne grossisse pas indéfiniment, sans jamais changer l'angle visuel affiché : on ne
+   * touche donc jamais à la valeur par un modulo direct (ça inverserait le sens de l'animation
+   * CSS, ex. passer de 0deg à 270deg au lieu de -90deg -> rotation visuelle de 3/4 de tour). */
+  function normalizeBoardRotation() {
+    if (state.boardRotation > 1000) state.boardRotation -= 1000;
+    if (state.boardRotation < -1000) state.boardRotation += 1000;
+  }
+
   function rotateBoardLeft() {
-    state.boardRotation = (state.boardRotation + 3) % 4;
-    render();
+    state.boardRotation -= 1;
+    normalizeBoardRotation();
+    applyBoardRotation();
   }
 
   function rotateBoardRight() {
-    state.boardRotation = (state.boardRotation + 1) % 4;
-    render();
+    state.boardRotation += 1;
+    normalizeBoardRotation();
+    applyBoardRotation();
   }
 
   // --- Glisser-déposer des tuiles (souris + tactile via Pointer Events) ---
@@ -790,6 +864,8 @@
 
   function performDrop(source, target) {
     if (!target) return;
+    state.selectedSlotTile = null;
+    state.selectedTrayTile = null;
     if (target.type === 'slot') {
       if (state.guess.lockedSlots[target.slotIndex]) return;
       if (source.type === 'tray') {
@@ -811,11 +887,24 @@
     dragState = null;
   }
 
+  /** Mémorise le dernier tap par clé (tuile du tas, tuile du plateau, reste du plateau)
+   * pour détecter les doubles-taps de manière indépendante. */
+  let lastTap = { key: null, time: 0 };
+  let pendingTapTimeout = null;
+
+  function registerTapAndCheckDouble(key) {
+    const now = Date.now();
+    const isDouble = lastTap.key === key && (now - lastTap.time) < 350;
+    lastTap = isDouble ? { key: null, time: 0 } : { key, time: now };
+    return isDouble;
+  }
+
   function onPointerDown(e) {
     if (state.screen !== 'guess') return;
-    if (e.target.closest('.rotate-btn')) return;
+    if (e.target.closest('.tile-center-btn') || e.target.closest('[data-action]') || e.target.closest('input')) return;
     const trayTileEl = e.target.closest('.tray-tile');
     const slotEl = e.target.closest('.clover-cell');
+    const boardEl = e.target.closest('.board');
     let source = null;
     let tileId = null;
     let sourceEl = null;
@@ -823,20 +912,29 @@
       tileId = trayTileEl.dataset.tile;
       source = { type: 'tray', tileId };
       sourceEl = trayTileEl;
-    } else if (slotEl && !slotEl.classList.contains('empty')) {
+    } else if (slotEl) {
       const slotIndex = Number(slotEl.dataset.slot);
       if (state.guess.lockedSlots[slotIndex]) return;
       const cell = state.guess.slots[slotIndex];
-      if (!cell) return;
-      tileId = cell.tileId;
-      source = { type: 'slot', slotIndex };
+      if (cell) {
+        tileId = cell.tileId;
+        source = { type: 'slot', slotIndex };
+      } else {
+        // Case vide : pas de tuile à faire glisser, mais on suit quand même le tap pour
+        // qu'un double-tap ici puisse aussi faire pivoter tout le plateau.
+        source = { type: 'slot-empty', slotIndex };
+      }
       sourceEl = slotEl;
+    } else if (boardEl) {
+      // Reste du plateau (bords/indices, espace entre les tuiles) : uniquement pour détecter
+      // un double-tap qui fait pivoter tout le plateau.
+      source = { type: 'board' };
+      sourceEl = boardEl;
     } else {
       return;
     }
     const rect = sourceEl.getBoundingClientRect();
     dragState = {
-      pointerId: e.pointerId,
       source,
       tileId,
       sourceEl,
@@ -848,6 +946,13 @@
       ghostEl: null,
     };
     try { sourceEl.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    dragState.pointerId = e.pointerId;
+  }
+
+  /** Types de tuile qu'on peut effectivement faire glisser (les cases vides et le reste du
+   * plateau ne servent qu'à détecter les taps, pas de glisser-déposer). */
+  function isDraggableSource(source) {
+    return source.type === 'tray' || source.type === 'slot';
   }
 
   function onPointerMove(e) {
@@ -856,10 +961,12 @@
     const dy = e.clientY - dragState.startY;
     if (!dragState.moved && Math.hypot(dx, dy) > 6) {
       dragState.moved = true;
-      dragState.sourceEl.classList.add('drag-source');
-      createDragGhost();
+      if (isDraggableSource(dragState.source)) {
+        dragState.sourceEl.classList.add('drag-source');
+        createDragGhost();
+      }
     }
-    if (dragState.moved) {
+    if (dragState.moved && isDraggableSource(dragState.source)) {
       positionDragGhost(e.clientX, e.clientY);
       highlightDropTarget(e.clientX, e.clientY);
     }
@@ -867,19 +974,74 @@
 
   function onPointerUp(e) {
     if (!dragState || dragState.pointerId !== e.pointerId) return;
-    const { source, moved } = dragState;
+    const { source, moved, sourceEl } = dragState;
     if (moved) {
-      const target = findDropTarget(e.clientX, e.clientY);
-      performDrop(source, target);
+      if (isDraggableSource(source)) {
+        const target = findDropTarget(e.clientX, e.clientY);
+        performDrop(source, target);
+      }
       endDrag();
       render();
-    } else {
-      endDrag();
-      if (source.type === 'tray') {
-        selectTrayTile(source.tileId);
-      } else {
-        slotClick(source.slotIndex);
+      return;
+    }
+
+    endDrag();
+
+    if (source.type === 'tray') {
+      // Tap simple ou double-tap sur une tuile du tas : la partie droite/gauche détermine
+      // le sens de rotation en cas de double-tap ; un tap isolé la sélectionne comme avant.
+      const rect = sourceEl.getBoundingClientRect();
+      const isRight = (e.clientX - rect.left) > rect.width / 2;
+      if (registerTapAndCheckDouble(`tray:${source.tileId}`)) {
+        if (pendingTapTimeout) { clearTimeout(pendingTapTimeout); pendingTapTimeout = null; }
+        rotateTrayBy(source.tileId, isRight ? 1 : -1);
+        return;
       }
+      pendingTapTimeout = setTimeout(() => {
+        pendingTapTimeout = null;
+        selectTrayTile(source.tileId);
+      }, 300);
+      return;
+    }
+
+    // Tuile posée, case vide ou reste du plateau : chacun a son propre historique de tap.
+    if (source.type === 'slot') {
+      // Tuile posée sur le plateau.
+      const rect = sourceEl.getBoundingClientRect();
+      const isRight = (e.clientX - rect.left) > rect.width / 2;
+      if (registerTapAndCheckDouble(`slot:${source.slotIndex}`)) {
+        // Double-tap : faire tourner la tuile (d'un seul quart).
+        if (pendingTapTimeout) { clearTimeout(pendingTapTimeout); pendingTapTimeout = null; }
+        rotateSlotBy(source.slotIndex, isRight ? 1 : -1);
+        return;
+      }
+      // Tap isolé : sélectionner ou déposter la tuile, selon le contexte.
+      pendingTapTimeout = setTimeout(() => {
+        pendingTapTimeout = null;
+        slotClick(source.slotIndex);
+      }, 300);
+      return;
+    }
+
+    if (source.type === 'slot-empty' || source.type === 'board') {
+      // Case vide ou reste du plateau (indices, espace entre les tuiles).
+      const boardEl = sourceEl.closest('.board') || sourceEl;
+      const boardRect = boardEl.getBoundingClientRect();
+      const isRight = (e.clientX - boardRect.left) > boardRect.width / 2;
+      if (registerTapAndCheckDouble('board')) {
+        // Double-tap : faire tourner TOUT le plateau (d'un seul quart).
+        if (pendingTapTimeout) { clearTimeout(pendingTapTimeout); pendingTapTimeout = null; }
+        if (isRight) rotateBoardRight(); else rotateBoardLeft();
+        return;
+      }
+      // Tap isolé sur une case vide : clic normal.
+      if (source.type === 'slot-empty') {
+        pendingTapTimeout = setTimeout(() => {
+          pendingTapTimeout = null;
+          slotClick(source.slotIndex);
+        }, 300);
+      }
+      // Tap isolé sur le reste du plateau : pas de comportement.
     }
   }
 
@@ -887,6 +1049,25 @@
     if (!dragState || dragState.pointerId !== e.pointerId) return;
     endDrag();
   }
+
+  /** Double-tap/double-clic sur le plateau, pour les écrans qui ne passent pas par le système
+   * de glisser-déposer ci-dessus (ex. l'écran du donneur d'indices, où les tuiles n'ont pas
+   * de rotation individuelle) : fait pivoter tout le plateau, moitié droite = vers la droite,
+   * moitié gauche = vers la gauche. Sur l'écran de devinette, c'est onPointerUp qui gère déjà
+   * ce cas (y compris par-dessus les tuiles), donc on ne fait rien ici pour ne pas déclencher
+   * la rotation deux fois.
+   */
+  app.addEventListener('click', (e) => {
+    if (state.screen === 'guess') return;
+    if (e.target.closest('[data-action]')) return;
+    if (e.target.closest('input')) return;
+    const boardEl = e.target.closest('.board');
+    if (!boardEl) return;
+    if (!registerTapAndCheckDouble('board-click')) return;
+    const rect = boardEl.getBoundingClientRect();
+    const isRight = (e.clientX - rect.left) > rect.width / 2;
+    if (isRight) rotateBoardRight(); else rotateBoardLeft();
+  });
 
   // --- Event delegation ---
 
@@ -911,16 +1092,39 @@
       case 'reveal': return reveal();
       case 'reroll-tile': return rerollTileAction(Number(el.dataset.slot));
       case 'validate-clues': return validateClues();
-      case 'rotate-tray': e.stopPropagation(); return rotateTray(el.dataset.tile);
-      case 'rotate-slot': e.stopPropagation(); return rotateSlot(Number(el.dataset.slot));
       case 'check-guess': return checkGuessAction();
       case 'continue-after-result': return continueAfterResult();
       case 'replay-same': return replaySamePlayers();
       case 'new-game': return newGame();
       case 'go-home': return goHomeAction();
-      case 'rotate-board-left': return rotateBoardLeft();
-      case 'rotate-board-right': return rotateBoardRight();
       default: return;
+    }
+  });
+
+  // --- Curseurs de pivotement (tuiles et plateau) ---
+
+  const ROTATE_CURSOR_RIGHT = 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M6.5 6.5A8 8 0 1 1 4 12\' fill=\'none\' stroke=\'%232e8b57\' stroke-width=\'2.5\' stroke-linecap=\'round\'/%3E%3Cpath d=\'M4 12 L4 7 L9 9 Z\' fill=\'%232e8b57\'/%3E%3C/svg%3E") 12 12, pointer';
+  const ROTATE_CURSOR_LEFT = 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M17.5 6.5A8 8 0 1 0 20 12\' fill=\'none\' stroke=\'%232e8b57\' stroke-width=\'2.5\' stroke-linecap=\'round\'/%3E%3Cpath d=\'M20 12 L20 7 L15 9 Z\' fill=\'%232e8b57\'/%3E%3C/svg%3E") 12 12, pointer';
+
+  /** Survol des zones de pivotement : indique par le curseur le sens de rotation (droite/gauche)
+   * qu'un double-clic/double-tap déclenchera à cet endroit, aussi bien sur une tuile individuelle
+   * (tas ou plateau, écran de devinette) que sur le plateau entier (écrans avec un plateau). */
+  app.addEventListener('mousemove', (e) => {
+    const boardEl = e.target.closest('.board');
+    if (boardEl && !e.target.closest('.clue-input') && !e.target.closest('[data-action]')) {
+      const rect = boardEl.getBoundingClientRect();
+      const boardCursor = (e.clientX - rect.left) > rect.width / 2 ? ROTATE_CURSOR_RIGHT : ROTATE_CURSOR_LEFT;
+      boardEl.style.cursor = boardCursor;
+      // Case vide : pas de tuile à tourner individuellement, donc même curseur que le plateau entier.
+      const emptyCell = e.target.closest('.clover-cell.empty');
+      if (emptyCell) emptyCell.style.cursor = boardCursor;
+    }
+    if (state.screen === 'guess') {
+      const tileWrap = e.target.closest('.tray-tile, .clover-cell:not(.locked):not(.empty)');
+      if (tileWrap) {
+        const rect = tileWrap.getBoundingClientRect();
+        tileWrap.style.cursor = (e.clientX - rect.left) > rect.width / 2 ? ROTATE_CURSOR_RIGHT : ROTATE_CURSOR_LEFT;
+      }
     }
   });
 
@@ -943,8 +1147,26 @@
   });
 
   // --- Démarrage ---
-  state = freshState();
-  render();
+  // Le dictionnaire est chargé en JSON avant le tout premier rendu : l'écran d'accueil n'a
+  // besoin d'aucun mot, donc ce court délai (fichier local, quasi instantané) ne se voit pas.
+  let wordsLoadFailed = false;
+  fetch('data/words.json')
+    .then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    })
+    .then((data) => {
+      if (Array.isArray(data)) WORDS = data;
+    })
+    .catch((err) => {
+      console.error('Impossible de charger data/words.json :', err);
+      wordsLoadFailed = true;
+    })
+    .finally(() => {
+      state = freshState();
+      if (wordsLoadFailed) state.wordsLoadError = true;
+      render();
+    });
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
