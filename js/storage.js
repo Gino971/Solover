@@ -71,6 +71,26 @@ function saveRemovedWords(list) {
   return saveWordList(REMOVED_WORDS_KEY, list);
 }
 
+// --- Dictionnaire sélectionné (nom de fichier dans data/) ---
+
+const SELECTED_DICTIONARY_KEY = 'trefle-indices:dictionnaire';
+
+function loadSelectedDictionary() {
+  try {
+    return localStorage.getItem(SELECTED_DICTIONARY_KEY) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function saveSelectedDictionary(file) {
+  try {
+    localStorage.setItem(SELECTED_DICTIONARY_KEY, file);
+  } catch (e) {
+    // stockage indisponible (mode privé, quota...) : on ignore silencieusement
+  }
+}
+
 if (typeof window !== 'undefined') {
   window.Storage = {
     loadHistory,
@@ -80,5 +100,7 @@ if (typeof window !== 'undefined') {
     saveCustomWords,
     loadRemovedWords,
     saveRemovedWords,
+    loadSelectedDictionary,
+    saveSelectedDictionary,
   };
 }

@@ -126,11 +126,11 @@ function rerollTile(round, dictionary, slotIndex) {
 }
 
 const RATING_TABLE = [
-  { min: 0, label: 'Trèfle fané', emoji: '🍂' },
-  { min: 0.4, label: 'Trèfle qui pousse', emoji: '🌱' },
-  { min: 0.6, label: 'Trèfle porte-bonheur', emoji: '🍀' },
-  { min: 0.8, label: 'Trèfle en or', emoji: '✨' },
-  { min: 1.0, label: 'Trèfle légendaire', emoji: '🏆' },
+  { min: 0, label: 'Cœur fané', emoji: '🥀' },
+  { min: 0.4, label: 'Cœur qui pousse', emoji: '🌱' },
+  { min: 0.6, label: 'Cœur porte-bonheur', emoji: '❤️' },
+  { min: 0.8, label: 'Cœur en or', emoji: '✨' },
+  { min: 1.0, label: 'Cœur légendaire', emoji: '🏆' },
 ];
 
 function rateScore(totalScore, maxScore) {

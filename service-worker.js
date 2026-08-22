@@ -1,7 +1,7 @@
 // Service worker : mise en cache de l'app shell pour un fonctionnement 100% hors-ligne.
 'use strict';
 
-const CACHE_NAME = 'trefle-indices-v8';
+const CACHE_NAME = 'coeur-indices-v11';
 const ASSETS = [
   './',
   './index.html',
@@ -32,6 +32,22 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  // Fichiers dictionnaire (data/*.json) : réseau en priorité (fallback cache hors-ligne
+  // seulement), pour ne jamais rester bloqué sur une ancienne copie mise en cache.
+  if (/\/data\/[^/]+\.json$/.test(event.request.url)) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;

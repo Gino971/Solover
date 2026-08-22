@@ -1,13 +1,13 @@
 {
-  "name": "Trèfle & Indices",
-  "short_name": "Trèfle & Indices",
-  "description": "Jeu d'association de mots à trèfle, jouable hors-ligne à plusieurs joueurs.",
+  "name": "Cœur & Indices",
+  "short_name": "Cœur & Indices",
+  "description": "Jeu d'association de mots à cœur, jouable hors-ligne à plusieurs joueurs.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f4f9f5",
-  "theme_color": "#2e8b57",
+  "background_color": "#fdeceb",
+  "theme_color": "#c0392b",
   "lang": "fr",
   "icons": [
     { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }

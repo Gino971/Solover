@@ -19,10 +19,14 @@
   const MAX_PLAYERS = 8;
   const WORD_RE = /^[a-zàâäéèêëïîôöùûüçœæ'-]+$/i;
 
-  // Dictionnaire de base, chargé de façon asynchrone depuis data/words.json au démarrage
+  // Dictionnaire de base, chargé de façon asynchrone depuis data/<fichier>.json au démarrage
   // (voir tout en bas, section "Démarrage") — modifiable directement, ce fichier n'étant que
   // du JSON pur (pas de JS autour à respecter).
   let WORDS = [];
+
+  // Liste des dictionnaires disponibles dans data/ (noms de fichiers .json) et fichier actif.
+  let DICTIONARIES = ['words.json'];
+  let currentDictionaryFile = 'words.json';
 
   // Terminaisons de conjugaison assez spécifiques pour repérer un verbe conjugué avec peu
   // de faux positifs (on évite volontairement les terminaisons trop courtes/ambiguës comme
@@ -37,6 +41,13 @@
 
   function isLikelyConjugatedVerb(word) {
     return VERB_ENDINGS.some((suf) => word.length - suf.length >= 3 && word.endsWith(suf));
+  }
+
+  /** Nom lisible pour un fichier dictionnaire (ex. "words-enfants.json" -> "words enfants"). */
+  function dictionaryLabel(file) {
+    if (file === 'words.json') return 'Dictionnaire complet';
+    const raw = file.replace(/\.json$/i, '').replace(/[-_]+/g, ' ');
+    return raw.replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   const app = document.getElementById('app');
@@ -69,7 +80,6 @@
       maxScore: 0,
       nextScreenAfterTransition: '',
       rulesOpen: false,
-      wordsPanelOpen: false,
       wordFilterQuery: '',
       wordFilterStatus: 'custom',
       boardRotation: 0,
@@ -92,14 +102,15 @@
     const removed = new Set(Storage.loadRemovedWords ? Storage.loadRemovedWords() : []);
     const custom = Storage.loadCustomWords ? Storage.loadCustomWords() : [];
     const base = WORDS.filter((w) => !removed.has(w));
-    custom.forEach((w) => { if (!base.includes(w)) base.push(w); });
+    custom.forEach((w) => { if (!removed.has(w) && !base.includes(w)) base.push(w); });
     return base;
   }
 
   /** Construit la liste de mots { word, status } selon le filtre de statut et le texte de recherche. */
   function getFilteredWords() {
     const removed = Storage.loadRemovedWords ? Storage.loadRemovedWords() : [];
-    const custom = Storage.loadCustomWords ? Storage.loadCustomWords() : [];
+    const rawCustom = Storage.loadCustomWords ? Storage.loadCustomWords() : [];
+    const custom = rawCustom.filter((w) => !WORDS.includes(w));
     const removedSet = new Set(removed);
     const status = state.wordFilterStatus;
     let items;
@@ -226,35 +237,25 @@
     const best = Storage.bestScore ? Storage.bestScore() : null;
     const nameInputs = state.players.map((name, i) => `
       <div class="player-row">
-        <input type="text" class="player-name" data-index="${i}" placeholder="Joueur ${i + 1}" value="${esc(name)}" maxlength="20" />
+        <input type="text" class="player-name" data-index="${i}" placeholder="Joueur ${i + 1}" value="${esc(name)}" maxlength="15" />
         ${state.players.length > MIN_PLAYERS ? `<button class="btn-icon" data-action="remove-player" data-index="${i}" title="Retirer">✕</button>` : ''}
       </div>`).join('');
 
     app.innerHTML = `
       <section class="screen screen-setup">
-        <h1>🍀 So lover</h1>
-        ${state.wordsLoadError ? '<p class="error-banner">⚠️ Le dictionnaire (data/words.json) n\'a pas pu être chargé. Vérifiez que le fichier existe et que le jeu est servi via un serveur web (pas ouvert directement depuis le disque).</p>' : ''}
+        <h1>❤️ So lover</h1>
+        ${state.wordsLoadError ? `<p class="error-banner">⚠️ Le dictionnaire (data/${esc(currentDictionaryFile)}) n'a pas pu être chargé. Vérifiez que le fichier existe et que le jeu est servi via un serveur web (pas ouvert directement depuis le disque).</p>` : ''}
         ${best ? `<p class="best-score">Meilleur score : ${best.totalScore}/${best.maxScore} (${Math.round(best.ratio * 100)}%)</p>` : ''}
         <h2>Joueurs (3 à 8)</h2>
         <div class="player-list">${nameInputs}</div>
         <div class="setup-actions">
-          <button class="btn btn-secondary" data-action="add-player" ${state.players.length >= MAX_PLAYERS ? 'disabled' : ''}>+ Ajouter un joueur</button>
+          <button class="btn-fab" data-action="add-player" title="Ajouter un joueur" ${state.players.length >= MAX_PLAYERS ? 'disabled' : ''}>+</button>
         </div>
-        <button class="btn btn-primary btn-large" data-action="start-game">Commencer la partie</button>
+        <button class="btn-fab-primary" data-action="start-game" title="Commencer la partie">▶️</button>
         <button class="btn btn-link" data-action="toggle-rules">📖 Règles du jeu</button>
         ${state.rulesOpen ? renderRules() : ''}
-        <button class="btn btn-link" data-action="toggle-words">📝 Gérer les mots</button>
-        ${state.wordsPanelOpen ? renderWordsManager() : ''}
+        <button class="btn btn-link" data-action="open-words">📝 Gérer les mots</button>
       </section>`;
-
-    if (state.wordsPanelOpen) {
-      const input = app.querySelector('.word-search');
-      if (input) {
-        input.focus();
-        const v = input.value;
-        input.setSelectionRange(v.length, v.length);
-      }
-    }
   }
 
   function renderRules() {
@@ -268,9 +269,24 @@
       </div>`;
   }
 
+  function renderWordsManagerScreen() {
+    app.innerHTML = `
+      <section class="screen screen-words">
+        <div class="words-topbar">${homeBtnHTML()}</div>
+        ${renderWordsManager()}
+      </section>`;
+
+    const input = app.querySelector('.word-search');
+    if (input) {
+      input.focus();
+      const v = input.value;
+      input.setSelectionRange(v.length, v.length);
+    }
+  }
+
   function renderWordsManager() {
     const removed = Storage.loadRemovedWords ? Storage.loadRemovedWords() : [];
-    const custom = Storage.loadCustomWords ? Storage.loadCustomWords() : [];
+    const custom = (Storage.loadCustomWords ? Storage.loadCustomWords() : []).filter((w) => !WORDS.includes(w));
     const rawQuery = state.wordFilterQuery || '';
     const query = normalizeWord(rawQuery);
 
@@ -310,17 +326,25 @@
 
     const countHTML = `<p class="hint">${results.length} mot${results.length > 1 ? 's' : ''}</p>`;
 
+    const dictionaryOptionsHTML = DICTIONARIES.map((f) => `
+      <option value="${esc(f)}" ${f === currentDictionaryFile ? 'selected' : ''}>${esc(dictionaryLabel(f))}</option>`).join('');
+
     return `
       <div class="rules-box words-box">
         <h3>Gérer les mots</h3>
-        <p class="hint">Vos ajouts/retraits sont enregistrés dans l'app, mais n'existent pas dans le fichier <code>data/words.json</code> tant que vous ne l'avez pas remplacé.</p>
+        ${DICTIONARIES.length > 1 ? `
+        <label class="dictionary-picker">
+          Dictionnaire actif :
+          <select class="dictionary-select">${dictionaryOptionsHTML}</select>
+        </label>` : ''}
+        <p class="hint">Vos ajouts/retraits sont enregistrés dans l'app, mais n'existent pas dans le fichier <code>data/${esc(currentDictionaryFile)}</code> tant que vous ne l'avez pas remplacé.</p>
         <div class="word-export-actions">
-          <button class="btn btn-secondary" data-action="export-words">💾 Exporter la liste (words.json)</button>
+          <button class="btn btn-secondary" data-action="export-words">💾 Exporter la liste (${esc(currentDictionaryFile)})</button>
           ${(custom.length || removed.length) ? `<button class="btn-link" data-action="reset-word-overrides">Effacer mes ajustements (après export)</button>` : ''}
         </div>
         <p class="hint">Filtrez la liste ci-dessous, ou tapez un mot pour l'ajouter s'il n'existe pas encore.</p>
         <div class="word-filters">${filterButtonsHTML}</div>
-        <input type="text" class="player-name word-search" placeholder="Filtrer ou ajouter un mot…" value="${esc(rawQuery)}" maxlength="24" />
+        <input type="text" class="word-search" placeholder="Filtrer ou ajouter un mot…" value="${esc(rawQuery)}" maxlength="24" />
         ${addSuggestionHTML}
         ${verbsNoticeHTML}
         ${countHTML}
@@ -374,6 +398,16 @@
       </section>`;
   }
 
+  /** Aligne la taille des tuiles de la pioche (en bas) sur la taille réelle des
+   * emplacements du plateau (en haut), qui varie selon l'écran — pour que la tuile
+   * qu'on déplace corresponde visuellement à la case où elle doit atterrir. */
+  function syncTrayTileSize() {
+    const cell = app.querySelector('.clover-cell');
+    if (!cell) return;
+    const size = cell.getBoundingClientRect().width;
+    if (size) document.documentElement.style.setProperty('--tray-tile-size', `${size}px`);
+  }
+
   function renderGuess() {
     const allFilled = state.guess.slots.every((s) => s !== null);
     const cloverArrangement = state.guess.slots.map((s) => (s ? { tile: findTile(state.round, s.tileId), rotation: s.rotation } : null));
@@ -425,11 +459,13 @@
       state.boardRotation = 0;
     }
     applyBoardRotation();
+    document.body.classList.toggle('hide-board-heart', state.screen === 'words');
     switch (state.screen) {
       case 'setup': return renderSetup();
+      case 'words': return renderWordsManagerScreen();
       case 'transition': return renderTransition();
       case 'cluegiver': return renderClueGiver();
-      case 'guess': return renderGuess();
+      case 'guess': renderGuess(); return syncTrayTileSize();
       case 'result': return renderResult();
       case 'final': return renderFinal();
       default: return renderSetup();
@@ -453,10 +489,12 @@
   function addWordAction(word) {
     const w = normalizeWord(word);
     if (!w || !Storage.loadCustomWords || !Storage.saveCustomWords) return;
-    const custom = Storage.loadCustomWords();
-    if (!custom.includes(w)) {
-      custom.push(w);
-      Storage.saveCustomWords(custom);
+    if (!WORDS.includes(w)) {
+      const custom = Storage.loadCustomWords();
+      if (!custom.includes(w)) {
+        custom.push(w);
+        Storage.saveCustomWords(custom);
+      }
     }
     // si le mot avait été retiré du dictionnaire de base, on annule ce retrait
     if (Storage.loadRemovedWords && Storage.saveRemovedWords) {
@@ -515,7 +553,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'words.json';
+    a.download = currentDictionaryFile;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -820,6 +858,11 @@
 
   /** Retour à l'accueil depuis un écran de jeu, avec confirmation si une partie est en cours. */
   function goHomeAction() {
+    if (state.screen === 'words') {
+      state.screen = 'setup';
+      state.wordFilterQuery = '';
+      return render();
+    }
     const midGame = ['transition', 'cluegiver', 'guess', 'result'].includes(state.screen);
     if (midGame) {
       const ok = window.confirm('Quitter la partie en cours et revenir à l\'accueil ?\n\nLa progression de cette partie sera perdue.');
@@ -1071,8 +1114,8 @@
       case 'remove-player': return removePlayer(Number(el.dataset.index));
       case 'start-game': return startGame();
       case 'toggle-rules': state.rulesOpen = !state.rulesOpen; return render();
-      case 'toggle-words': state.wordsPanelOpen = !state.wordsPanelOpen; if (!state.wordsPanelOpen) state.wordFilterQuery = ''; return render();
-      case 'set-word-filter': state.wordFilterStatus = el.dataset.filter; return render();
+      case 'open-words': state.screen = 'words'; state.wordFilterQuery = ''; return render();
+      case 'set-word-filter': state.wordFilterStatus = el.dataset.filter; state.wordFilterQuery = ''; return render();
       case 'add-word': return addWordAction(el.dataset.word);
       case 'remove-custom-word': return removeCustomWordAction(el.dataset.word);
       case 'exclude-word': return excludeWordAction(el.dataset.word);
@@ -1129,6 +1172,12 @@
   document.addEventListener('pointerup', onPointerUp);
   document.addEventListener('pointercancel', onPointerCancel);
 
+  app.addEventListener('change', (e) => {
+    if (e.target.classList.contains('dictionary-select')) {
+      selectDictionaryAction(e.target.value);
+    }
+  });
+
   app.addEventListener('input', (e) => {
     if (e.target.classList.contains('player-name') && e.target.dataset.index !== undefined) {
       state.players[Number(e.target.dataset.index)] = e.target.value;
@@ -1142,20 +1191,64 @@
     }
   });
 
+  let resizeSyncTimer = null;
+  window.addEventListener('resize', () => {
+    if (state && state.screen === 'guess') {
+      clearTimeout(resizeSyncTimer);
+      resizeSyncTimer = setTimeout(syncTrayTileSize, 120);
+    }
+  });
+
   // --- Démarrage ---
   // Le dictionnaire est chargé en JSON avant le tout premier rendu : l'écran d'accueil n'a
   // besoin d'aucun mot, donc ce court délai (fichier local, quasi instantané) ne se voit pas.
+
+  /** Charge un fichier dictionnaire précis (nom de fichier dans data/) dans WORDS. */
+  function loadDictionaryFile(file) {
+    return fetch(`data/${file}`, { cache: 'no-cache' })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (!Array.isArray(data)) throw new Error('Format invalide (tableau de mots attendu)');
+        WORDS = data;
+      });
+  }
+
+  /** Essaie de lister les .json présents dans data/ (listing de répertoire, ex. serveur local
+   * simple), sinon retombe sur le manifeste data/dictionaries.json, sinon sur words.json seul. */
+  function discoverDictionaryFiles() {
+    return fetch('data/', { cache: 'no-cache' })
+      .then((res) => (res.ok ? res.text() : Promise.reject(new Error('no listing'))))
+      .then((html) => {
+        const files = new Set();
+        const re = /href="([^"?#]+\.json)"/gi;
+        let m;
+        while ((m = re.exec(html))) {
+          const name = decodeURIComponent(m[1].split('/').pop());
+          if (name && name !== 'dictionaries.json') files.add(name);
+        }
+        if (!files.size) throw new Error('empty listing');
+        return Array.from(files).sort((a, b) => a.localeCompare(b, 'fr'));
+      })
+      .catch(() => fetch('data/dictionaries.json', { cache: 'no-cache' })
+        .then((res) => (res.ok ? res.json() : Promise.reject(new Error('no manifest'))))
+        .then((list) => (Array.isArray(list) && list.length ? list : Promise.reject(new Error('empty manifest'))))
+        .catch(() => ['words.json']));
+  }
+
   let wordsLoadFailed = false;
-  fetch('data/words.json')
-    .then((res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    })
-    .then((data) => {
-      if (Array.isArray(data)) WORDS = data;
+  discoverDictionaryFiles()
+    .then((files) => {
+      DICTIONARIES = files;
+      const saved = Storage.loadSelectedDictionary ? Storage.loadSelectedDictionary() : '';
+      const defaultFile = DICTIONARIES.includes('words.json') ? 'words.json' : DICTIONARIES[0];
+      currentDictionaryFile = DICTIONARIES.includes(saved) ? saved : defaultFile;
+      return loadDictionaryFile(currentDictionaryFile);
     })
     .catch((err) => {
-      console.error('Impossible de charger data/words.json :', err);
+      console.error('Impossible de charger le dictionnaire :', err);
       wordsLoadFailed = true;
     })
     .finally(() => {
@@ -1163,6 +1256,22 @@
       if (wordsLoadFailed) state.wordsLoadError = true;
       render();
     });
+
+  /** Change le dictionnaire actif suite à un choix dans la liste déroulante. */
+  function selectDictionaryAction(file) {
+    if (!DICTIONARIES.includes(file) || file === currentDictionaryFile) return;
+    loadDictionaryFile(file)
+      .then(() => {
+        currentDictionaryFile = file;
+        if (Storage.saveSelectedDictionary) Storage.saveSelectedDictionary(file);
+        state.wordsLoadError = false;
+        render();
+      })
+      .catch((err) => {
+        console.error(`Impossible de charger ${file} :`, err);
+        window.alert(`Impossible de charger « ${file} ».`);
+      });
+  }
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

@@ -7,7 +7,7 @@
   --bg: #f4f9f5;
   --text: #1c2b22;
   --radius: 14px;
-  --tile-size: 118px;
+  --tile-size: 185px;
 
   --handwriting:
     "Segoe Print",
@@ -49,8 +49,8 @@ body::after {
   position: fixed;
   inset: 0;
   margin: auto;
-  width: min(90vw, 90vh, 460px);
-  height: min(90vw, 90vh, 460px);
+  width: min(90vw, 90vh, 640px);
+  height: min(90vw, 90vh, 640px);
   transition: transform 0.35s ease;
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
@@ -61,6 +61,11 @@ body::after {
   -webkit-mask-size: contain;
   mask-size: contain;
   pointer-events: none;
+}
+
+body.hide-board-heart::before,
+body.hide-board-heart::after {
+  display: none;
 }
 
 /* Tranche épaisse du plateau : copie du cœur, bien plus sombre et nettement décalée */
@@ -88,7 +93,7 @@ body:has(.board)::after {
 }
 
 #app {
-  max-width: 640px;
+  max-width: 820px;
   margin: 0 auto;
   padding: 10px 12px 24px;
   -webkit-tap-highlight-color: transparent;
@@ -200,11 +205,60 @@ h2 {
   padding: 6px 10px;
 }
 
+.btn-fab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin: 6px auto;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--green);
+  background: white;
+  color: var(--green-dark);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.btn-fab:active {
+  transform: scale(0.95);
+}
+
+.btn-fab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-fab-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  margin: 10px auto;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: var(--green);
+  color: white;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.btn-fab-primary:active {
+  transform: scale(0.95);
+}
+
 /* Joueurs */
 
 .player-list {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -212,14 +266,16 @@ h2 {
 .player-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
 }
 
 .player-name {
-  flex: 1;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  border: 2px solid #cfe3d6;
+  flex: 0 0 auto;
+  width: 10em;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1.5px solid #cfe3d6;
   font-size: 1rem;
 }
 
@@ -236,6 +292,30 @@ h2 {
   padding: 16px;
   margin-top: 12px;
   line-height: 1.5;
+}
+
+.words-topbar {
+  display: flex;
+  margin-bottom: 8px;
+}
+
+.dictionary-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  color: #4a5c50;
+  margin: 4px 0 10px;
+}
+
+.dictionary-picker select {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 2px solid #cfe3d6;
+  font-size: 0.9rem;
+  background: white;
+  color: var(--text);
 }
 
 .rules-box h3 {
@@ -282,6 +362,16 @@ h2 {
   align-items: center;
 }
 
+.word-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 2px solid #cfe3d6;
+  font-size: 1.05rem;
+  margin: 6px 0;
+}
+
 .word-filters {
   display: flex;
   gap: 6px;
@@ -308,9 +398,9 @@ h2 {
 
 .word-results {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-  gap: 4px 6px;
-  max-height: 340px;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px 8px;
+  max-height: 420px;
   overflow-y: auto;
   margin-top: 6px;
   padding-right: 2px;
@@ -320,20 +410,17 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 4px;
+  gap: 6px;
   background: white;
   border: 1px solid #cfe3d6;
-  border-radius: 6px;
-  padding: 3px 4px 3px 8px;
-  font-size: 0.72rem;
-  line-height: 1.2;
-  overflow: hidden;
+  border-radius: 8px;
+  padding: 6px 6px 6px 10px;
+  font-size: 0.92rem;
+  line-height: 1.25;
 }
 
 .word-cell span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .word-cell--custom {
@@ -393,15 +480,15 @@ h2 {
 /* Enveloppe non tournante : contient le plateau (qui pivote) et la rangée de boutons sous lui,
    qui elle ne pivote jamais — sinon les boutons Accueil/Vérifier tournaient avec le cœur. */
 .board-wrap {
-  width: min(90vw, 90vh, 460px);
+  width: min(90vw, 90vh, 640px);
   margin: 24px auto 0;
   position: relative;
 }
 
 .board {
   display: grid;
-  grid-template-columns: 92px 1fr 92px;
-  grid-template-rows: auto 1fr auto;
+  grid-template-columns: clamp(64px, 13vw, 122px) minmax(0, 1fr) clamp(64px, 13vw, 122px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
     ". top ."
     "left clover right"
@@ -437,8 +524,8 @@ h2 {
   position: fixed;
   left: 50%;
   top: 50%;
-  width: min(90vw, 90vh, 460px);
-  height: min(90vw, 90vh, 460px);
+  width: min(90vw, 90vh, 640px);
+  height: min(90vw, 90vh, 640px);
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 6;
@@ -722,10 +809,14 @@ h2 {
 .clover {
   grid-area: clover;
   display: grid;
-  grid-template-columns: repeat(2, var(--tile-size));
-  grid-template-rows: repeat(2, var(--tile-size));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  width: min(100%, calc(var(--tile-size) * 2 + 10px));
+  aspect-ratio: 1;
   margin: 0 auto;
+  justify-self: center;
+  align-self: center;
 }
 
 .slot-0 {
@@ -919,7 +1010,7 @@ h2 {
   justify-content: center;
   padding: 2px;
   color: #9fb3a6;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   font-weight: 600;
   line-height: 1.05;
   text-align: center;
@@ -960,7 +1051,7 @@ h2 {
 
 .side.exterior {
   color: var(--green-dark);
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   background: var(--green-light);
 }
 
@@ -976,17 +1067,18 @@ h2 {
 .tile-center-btn {
   width: 30px;
   height: 30px;
-  background: var(--green);
+  background: none;
   color: white;
   border: none;
-  border-radius: 50%;
-  font-size: 1rem;
+  border-radius: 0;
+  font-size: 1.1rem;
   cursor: pointer;
   touch-action: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
 }
 
 .reroll-tile-btn {
-  background: var(--gold);
+  background: none;
 }
 
 /* Glisser-déposer */
@@ -1021,8 +1113,8 @@ h2 {
 }
 
 .tray-tile {
-  width: var(--tile-size);
-  height: var(--tile-size);
+  width: var(--tray-tile-size, var(--tile-size));
+  height: var(--tray-tile-size, var(--tile-size));
   flex: none;
   cursor: grab;
   touch-action: none;
@@ -1045,7 +1137,7 @@ h2 {
 .tray-tile .side {
   opacity: 1;
   color: var(--green-dark);
-  font-size: 0.62rem;
+  font-size: 0.74rem;
 }
 
 /* Résultats */
@@ -1110,20 +1202,12 @@ h2 {
 /* Petits écrans */
 
 @media (max-width: 380px) {
-  :root {
-    --tile-size: 92px;
-  }
-
-  .board {
-    grid-template-columns: 72px 1fr 72px;
-  }
-
   .side {
-    font-size: 0.58rem;
+    font-size: 0.64rem;
   }
 
   .side.exterior {
-    font-size: 0.68rem;
+    font-size: 0.7rem;
   }
 
   .edge-left .clue-input,
