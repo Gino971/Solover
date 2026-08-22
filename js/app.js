@@ -215,22 +215,29 @@
       </div>`;
   }
 
-  function trayHTML(round, guess) {
+  /** Rend une tuile de la pioche (glisser-déposer). Partagé par les deux côtés. */
+  function trayTileHTML(round, guess, tileId) {
     const rotations = guess.tileRotations;
     const traySpin = guess.traySpin || {};
-    return `<div class="tray">${guess.tray.map((tileId) => {
-      const tile = findTile(round, tileId);
-      const words = Game.wordsAt(tile, 0);
-      const rotation = rotations[tileId] || 0;
-      const selected = state.selectedTrayTile === tileId;
-      const scatter = guess.trayScatter[tileId] || { dx: 0, dy: 0, rot: 0 };
-      // Rotation de la tuile (`.tile-turn`) + décalage « en vrac » sur `.tray-tile`.
-      const turns = traySpin[tileId] || 0;
-      const scatterTransform = selected ? '' : `transform: translate(${scatter.dx}px, ${scatter.dy}px) rotate(${scatter.rot}deg);`;
-      return `<div class="tray-tile${selected ? ' selected' : ''}" data-tile="${tileId}" style="${scatterTransform}">
-        ${tileBundleHTML(words, new Set(), { rotation, turns })}
-      </div>`;
-    }).join('')}</div>`;
+    const tile = findTile(round, tileId);
+    const words = Game.wordsAt(tile, 0);
+    const rotation = rotations[tileId] || 0;
+    const selected = state.selectedTrayTile === tileId;
+    const scatter = guess.trayScatter[tileId] || { dx: 0, dy: 0, rot: 0 };
+    const turns = traySpin[tileId] || 0;
+    const scatterTransform = selected ? '' : `transform: translate(${scatter.dx}px, ${scatter.dy}px) rotate(${scatter.rot}deg);`;
+    return `<div class="tray-tile${selected ? ' selected' : ''}" data-tile="${tileId}" style="${scatterTransform}">
+      ${tileBundleHTML(words, new Set(), { rotation, turns })}
+    </div>`;
+  }
+
+  /** Deux piles de tuiles de part et d'autre du cœur (au lieu d'une rangée dessous). */
+  function trayGroupsHTML(round, guess) {
+    const half = Math.ceil(guess.tray.length / 2);
+    const left = guess.tray.slice(0, half);
+    const right = guess.tray.slice(half);
+    const side = (list, extraClass) => `<div class="tray tray-side ${extraClass}">${list.map((id) => trayTileHTML(round, guess, id)).join('')}</div>`;
+    return { left: side(left, 'tray-side-left'), right: side(right, 'tray-side-right') };
   }
 
   function renderSetup() {
@@ -363,22 +370,24 @@
     </div>`;
   }
 
-  /** Accueil calé sur la pointe du cœur de fond (écrans sans plateau). */
-  function floatingHomeHTML() {
-    return `<div class="heart-tip-actions">${tipButtonsRowHTML('')}</div>`;
+  /** Accueil calé sur la pointe du cœur de fond (écrans sans plateau). `actionHTML`
+   * optionnel : icône d'action principale de l'écran, placée au même endroit que sur
+   * les écrans avec plateau (voir tipButtonsRowHTML) — même emplacement partout. */
+  function floatingHomeHTML(actionHTML) {
+    return `<div class="heart-tip-actions">${tipButtonsRowHTML(actionHTML || '')}</div>`;
   }
 
   function renderTransition() {
     const clueGiver = state.players[state.roundIndex % state.players.length];
     const forGuess = state.nextScreenAfterTransition === 'guess';
+    const revealBtn = `<button class="corner-btn corner-btn-action" data-action="reveal" title="Révéler">👁️</button>`;
     app.innerHTML = `
       <section class="screen screen-transition">
-        ${floatingHomeHTML()}
+        ${floatingHomeHTML(revealBtn)}
         <h2>Manche ${state.roundIndex + 1} / ${state.players.length}</h2>
         ${forGuess
           ? `<p class="transition-text">Passe l'appareil à tout le monde <strong>sauf ${esc(clueGiver)}</strong>.</p>`
           : `<p class="transition-text">Passe l'appareil à <strong>${esc(clueGiver)}</strong>.</p>`}
-        <button class="btn btn-primary btn-large" data-action="reveal">Je suis prêt·e, révéler</button>
       </section>`;
   }
 
@@ -387,14 +396,14 @@
     const cluesReady = state.clues.every((c) => c.trim().length > 0);
     const edgesHTML = state.clues.map((c, i) => `
       <input type="text" class="clue-input" data-index="${i}" placeholder="Indice…" value="${esc(c)}" maxlength="40" />`);
-    const tipHome = { home: homeBtnHTML(), verify: '' };
+    const tipHome = {
+      home: homeBtnHTML(),
+      verify: `<button class="corner-btn corner-btn-action" data-action="validate-clues" title="Indices prêts" ${cluesReady ? '' : 'disabled'}>➡️</button>`,
+    };
     app.innerHTML = `
       <section class="screen screen-cluegiver">
         <h2>${esc(clueGiver)}, donne un indice par paire</h2>
         ${boardHTML(state.round.solutionArrangement, { interactive: false, tileReroll: true }, edgesHTML, tipHome)}
-        <div class="cluegiver-actions">
-          <button class="btn btn-primary btn-large" data-action="validate-clues" ${cluesReady ? '' : 'disabled'}>Indices prêts →</button>
-        </div>
       </section>`;
   }
 
@@ -415,39 +424,46 @@
     const edgesHTML = state.clues.map((c, i) => `<div class="edge-clue">${esc(c)}${feedback ? (feedback[i] ? ' ✅' : ' ❌') : ''}</div>`);
     const cornerButtons = {
       home: homeBtnHTML(),
-      verify: `<button class="corner-btn corner-btn-verify" data-action="check-guess" title="Vérifier" ${allFilled ? '' : 'disabled'}>✓</button>`,
+      verify: `<button class="corner-btn corner-btn-action" data-action="check-guess" title="Vérifier" ${allFilled ? '' : 'disabled'}>✓</button>`,
     };
+    const trayGroups = trayGroupsHTML(state.round, state.guess);
     app.innerHTML = `
       <section class="screen screen-guess">
         <h2>Manche ${state.roundIndex + 1} : reconstituez le cœur</h2>
-        ${boardHTML(cloverArrangement, { interactive: true, lockedSlots: state.guess.lockedSlots, selectedSlot: state.selectedSlotTile, slotSpin: state.guess.slotSpin }, edgesHTML, cornerButtons)}
-        ${trayHTML(state.round, state.guess)}
+        <div class="guess-layout">
+          ${trayGroups.left}
+          ${boardHTML(cloverArrangement, { interactive: true, lockedSlots: state.guess.lockedSlots, selectedSlot: state.selectedSlotTile, slotSpin: state.guess.slotSpin }, edgesHTML, cornerButtons)}
+          ${trayGroups.right}
+        </div>
       </section>`;
   }
 
 
   function renderResult() {
+    const isLastRound = state.roundIndex + 1 >= state.players.length;
+    const continueBtn = `<button class="corner-btn corner-btn-action" data-action="continue-after-result" title="${isLastRound ? 'Voir le score final' : 'Manche suivante'}">${isLastRound ? '🏆' : '➡️'}</button>`;
     app.innerHTML = `
       <section class="screen screen-result">
-        ${floatingHomeHTML()}
+        ${floatingHomeHTML(continueBtn)}
         <h2>Manche ${state.roundIndex + 1} résolue !</h2>
         <p class="round-score">${state.guess.attempts} essai${state.guess.attempts > 1 ? 's' : ''} — ${state.lastRoundScore} / 4 points</p>
         <p class="total-score">Score total : ${state.totalScore} / ${state.maxScore}</p>
-        <button class="btn btn-primary btn-large" data-action="continue-after-result">${state.roundIndex + 1 >= state.players.length ? 'Voir le score final' : 'Manche suivante →'}</button>
       </section>`;
   }
 
   function renderFinal() {
     const rating = Game.rateScore(state.totalScore, state.maxScore);
+    const actionsHTML = `<div class="corner-action-group">
+      <button class="corner-btn corner-btn-action" data-action="replay-same" title="Rejouer avec les mêmes joueurs">🔁</button>
+      <button class="corner-btn corner-btn-action" data-action="new-game" title="Nouvelle partie">➕</button>
+    </div>`;
     app.innerHTML = `
       <section class="screen screen-final">
-        ${floatingHomeHTML()}
+        ${floatingHomeHTML(actionsHTML)}
         <h2>Partie terminée !</h2>
         <p class="final-emoji">${rating.emoji}</p>
         <p class="final-label">${rating.label}</p>
         <p class="final-score">${state.totalScore} / ${state.maxScore} paires trouvées</p>
-        <button class="btn btn-primary btn-large" data-action="replay-same">Rejouer avec les mêmes joueurs</button>
-        <button class="btn btn-secondary" data-action="new-game">Nouvelle partie</button>
       </section>`;
   }
 
@@ -910,7 +926,7 @@
     }
     const trayEl = el.closest('.tray');
     if (trayEl && app.contains(trayEl)) {
-      return { type: 'tray' };
+      return { type: 'tray', trayEl };
     }
     return null;
   }
@@ -948,8 +964,7 @@
       const el = app.querySelector(`.clover-cell[data-slot="${target.slotIndex}"]`);
       if (el) el.classList.add('drag-over');
     } else if (target && target.type === 'tray') {
-      const trayEl = app.querySelector('.tray');
-      if (trayEl) trayEl.classList.add('drag-over');
+      if (target.trayEl) target.trayEl.classList.add('drag-over');
     }
   }
 
