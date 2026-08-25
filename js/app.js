@@ -1086,6 +1086,12 @@
     dragState = null;
   }
 
+  /** Champs de saisie : <input>/<textarea> mais aussi les indices gauche/droite, qui sont
+   * des <div contenteditable> (voir renderClueGiver). Un clic dessus ne doit jamais pivoter. */
+  function isEditableTarget(target) {
+    return !!(target.closest && target.closest('input, textarea, [contenteditable="true"]'));
+  }
+
   function clickRotatesClockwise(el, clientX) {
     const rect = el.getBoundingClientRect();
     return (clientX - rect.left) > rect.width / 2;
@@ -1093,7 +1099,7 @@
 
   function onPointerDown(e) {
     if (state.screen !== 'guess') return;
-    if (e.target.closest('.tile-center-btn') || e.target.closest('[data-action]') || e.target.closest('input')) return;
+    if (e.target.closest('.tile-center-btn') || e.target.closest('[data-action]') || isEditableTarget(e.target)) return;
     const trayTileEl = e.target.closest('.tray-tile');
     const slotEl = e.target.closest('.clover-cell');
     const boardEl = e.target.closest('.board');
@@ -1204,7 +1210,7 @@
   app.addEventListener('click', (e) => {
     if (state.screen === 'guess') return;
     if (e.target.closest('[data-action]')) return;
-    if (e.target.closest('input')) return;
+    if (isEditableTarget(e.target)) return;
     const boardEl = e.target.closest('.board');
     if (!boardEl) return;
     if (clickRotatesClockwise(boardEl, e.clientX)) rotateBoardRight();

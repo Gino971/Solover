@@ -1,7 +1,7 @@
 // Service worker : mise en cache de l'app shell pour un fonctionnement 100% hors-ligne.
 'use strict';
 
-const CACHE_NAME = 'trefle-indices-v15';
+const CACHE_NAME = 'trefle-indices-v16';
 const ASSETS = [
   './',
   './index.html',
