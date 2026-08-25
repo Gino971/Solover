@@ -1266,10 +1266,12 @@
 
   // --- Curseurs de pivotement (tuiles et plateau) ---
 
+  /** Le SVG porte width/height explicites : Chrome ignore un curseur SVG sans dimensions
+   * intrinsèques (un simple viewBox suffit à Safari, pas à Chrome). */
   function rotateCursorUrl(clockwise) {
     const svg = clockwise
-      ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M7 25c0-8 6-14 14-14" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/><path d="M7 25c0-8 6-14 14-14" fill="none" stroke="#1b5e3a" stroke-width="3.4" stroke-linecap="round"/><path d="M17 3.2 29 11.2 16.2 15.6z" fill="#fff"/><path d="M18.4 5.6 26.6 11.2 18 13.8z" fill="#1b5e3a"/></svg>'
-      : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M25 25c0-8-6-14-14-14" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/><path d="M25 25c0-8-6-14-14-14" fill="none" stroke="#1b5e3a" stroke-width="3.4" stroke-linecap="round"/><path d="M15 3.2 3 11.2 15.8 15.6z" fill="#fff"/><path d="M13.6 5.6 5.4 11.2 14 13.8z" fill="#1b5e3a"/></svg>';
+      ? '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M7 25c0-8 6-14 14-14" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/><path d="M7 25c0-8 6-14 14-14" fill="none" stroke="#1b5e3a" stroke-width="3.4" stroke-linecap="round"/><path d="M17 3.2 29 11.2 16.2 15.6z" fill="#fff"/><path d="M18.4 5.6 26.6 11.2 18 13.8z" fill="#1b5e3a"/></svg>'
+      : '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M25 25c0-8-6-14-14-14" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/><path d="M25 25c0-8-6-14-14-14" fill="none" stroke="#1b5e3a" stroke-width="3.4" stroke-linecap="round"/><path d="M15 3.2 3 11.2 15.8 15.6z" fill="#fff"/><path d="M13.6 5.6 5.4 11.2 14 13.8z" fill="#1b5e3a"/></svg>';
     return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 16 16, pointer`;
   }
   const ROTATE_CURSOR_RIGHT = rotateCursorUrl(true);
