@@ -9,6 +9,20 @@
   --radius: 14px;
   --tile-size: 185px;
 
+  /* Système de thèmes : forme + palette changent selon le dictionnaire de mots actif
+     (voir applyTheme() dans js/app.js et les blocs [data-theme="..."] ci-dessous). */
+  --shape-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  --shape-c1: #ff9a8c;
+  --shape-c2: #e5493a;
+  --shape-c3: #c0392b;
+  --shape-c4: #8a2016;
+  --shape-dark: #5e150d;
+  --shape-hole-c1: #ff9a8c;
+  --shape-hole-c2: #ff2d2d;
+  --shape-hole-c3: #c21f1f;
+  --shape-hole-dark: #8a1610;
+  --shape-bg: #fdeceb;
+
   --handwriting:
     "Segoe Print",
     "Bradley Hand",
@@ -26,6 +40,36 @@
     sans-serif;
 }
 
+/* Thème « trèfle » (dictionnaire général, words.json) */
+[data-theme="trefle"] {
+  --shape-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='14 14 72 89'%3E%3Ccircle cx='38' cy='38' r='18'/%3E%3Ccircle cx='62' cy='38' r='18'/%3E%3Ccircle cx='38' cy='62' r='18'/%3E%3Ccircle cx='62' cy='62' r='18'/%3E%3Crect x='44' y='55' width='12' height='42' rx='6'/%3E%3C/svg%3E");
+  --shape-c1: #8fd9ab;
+  --shape-c2: #4caf7d;
+  --shape-c3: #2e8b57;
+  --shape-c4: #1b5e3a;
+  --shape-dark: #123d27;
+  --shape-hole-c1: #8fd9ab;
+  --shape-hole-c2: #45a06e;
+  --shape-hole-c3: #1f6b45;
+  --shape-hole-dark: #0f2f1c;
+  --shape-bg: #eaf7ee;
+}
+
+/* Thème « feuille » (dictionnaire So Ecolo) */
+[data-theme="feuille"] {
+  --shape-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='6 -4 88 106'%3E%3Cpath d='M50,98 C22,82 10,52 22,18 C30,0 50,0 50,0 C50,0 70,0 78,18 C90,52 78,82 50,98 Z'/%3E%3C/svg%3E");
+  --shape-c1: #b9e08a;
+  --shape-c2: #7cb342;
+  --shape-c3: #4c8c3f;
+  --shape-c4: #2e5c26;
+  --shape-dark: #1c3a17;
+  --shape-hole-c1: #b9e08a;
+  --shape-hole-c2: #6ea83a;
+  --shape-hole-c3: #3f7a30;
+  --shape-hole-dark: #16300f;
+  --shape-bg: #eef7ea;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -34,11 +78,12 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: transparent;
+  background: var(--shape-bg);
   color: var(--text);
   min-height: 100%;
   position: relative;
   overflow-x: hidden;
+  transition: background 0.4s ease;
 }
 
 /* Cœur rouge en fond, sur tous les écrans du jeu */
@@ -52,8 +97,8 @@ body::after {
   width: min(90vw, 90vh, 640px);
   height: min(90vw, 90vh, 640px);
   transition: transform 0.35s ease;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  -webkit-mask-image: var(--shape-mask);
+  mask-image: var(--shape-mask);
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
@@ -70,15 +115,21 @@ body.hide-board-heart::after {
 
 /* Tranche épaisse du plateau : copie du cœur, bien plus sombre et nettement décalée */
 body::after {
-  z-index: -2;
-  background: #5e150d;
+  /* Note : évitez tout z-index négatif ici. Combiné à position:fixed, un z-index
+     négatif fait que Chromium peint cet élément SOUS le contenu normal de #app dès
+     que la page contient plusieurs éléments en flux — y compris dans les zones vides
+     où #app n'a pourtant aucun fond opaque. On le place donc à un niveau positif,
+     et c'est #app (voir plus bas, position:relative + z-index plus élevé) qui passe
+     au-dessus pour que le texte reste lisible. */
+  z-index: 0;
+  background: var(--shape-dark);
   transform: rotate(var(--board-rotation-deg, 0deg)) translateY(14px);
 }
 
 /* Face visible du plateau : dégradé plastique + ombre marquée qui suit le contour du cœur */
 body::before {
-  z-index: -1;
-  background: linear-gradient(150deg, #ff9a8c 0%, #e5493a 30%, var(--red) 60%, #8a2016 100%);
+  z-index: 1;
+  background: linear-gradient(150deg, var(--shape-c1) 0%, var(--shape-c2) 30%, var(--shape-c3) 60%, var(--shape-c4) 100%);
   filter: drop-shadow(0 12px 14px rgba(0, 0, 0, 0.35)) drop-shadow(0 -2px 0 rgba(255, 255, 255, 0.4));
   transform: rotate(var(--board-rotation-deg, 0deg));
 }
@@ -93,6 +144,8 @@ body:has(.board)::after {
 }
 
 #app {
+  position: relative;
+  z-index: 2;
   max-width: 1100px;
   margin: 0 auto;
   padding: 10px 12px 24px;
@@ -132,6 +185,73 @@ h2 {
   text-align: center;
   color: var(--gold);
   font-weight: 600;
+}
+
+.dict-picker {
+  margin: 6px 0 18px;
+}
+
+.dict-picker-label {
+  text-align: center;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7d9285;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.dict-picker-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  justify-content: safe center;
+  padding: 4px 2px 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dict-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 92px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 2px solid rgba(217, 232, 221, 0.8);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  color: var(--green-dark);
+  font-weight: 700;
+  font-size: 0.78rem;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.dict-card:active {
+  transform: scale(0.96);
+}
+
+.dict-card-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.dict-card.active {
+  border-color: var(--shape-c3);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--shape-c3) 78%, transparent), color-mix(in srgb, var(--shape-c4) 78%, transparent));
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  cursor: default;
+}
+
+.dict-card:disabled {
+  opacity: 1;
 }
 
 .error-banner {
@@ -215,7 +335,9 @@ h2 {
   padding: 0;
   border-radius: 50%;
   border: 2px solid var(--green);
-  background: white;
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   color: var(--green-dark);
   font-size: 1.4rem;
   line-height: 1;
@@ -276,6 +398,9 @@ h2 {
   padding: 5px 8px;
   border-radius: 8px;
   border: 1.5px solid #cfe3d6;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   font-size: 1rem;
 }
 
@@ -297,25 +422,6 @@ h2 {
 .words-topbar {
   display: flex;
   margin-bottom: 8px;
-}
-
-.dictionary-picker {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: 0.9rem;
-  color: #4a5c50;
-  margin: 4px 0 10px;
-}
-
-.dictionary-picker select {
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 2px solid #cfe3d6;
-  font-size: 0.9rem;
-  background: white;
-  color: var(--text);
 }
 
 .rules-box h3 {
@@ -526,9 +632,16 @@ h2 {
   top: 50%;
   width: min(90vw, 90vh, 640px);
   height: min(90vw, 90vh, 640px);
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) translateZ(0);
   pointer-events: none;
   z-index: 6;
+  /* Safari (WebKit) : un élément position:fixed imbriqué dans un ancêtre qui crée
+     son propre contexte d'empilement (ici #app, position:relative + z-index) n'est
+     parfois pas peint tant qu'un événement (survol, tap) ne force pas une
+     recomposition — les boutons restent cliquables/actifs mais invisibles jusqu'à
+     interaction. On force sa promotion en calque GPU dès sa création pour éviter
+     ce défaut de repaint initial. */
+  will-change: transform;
 }
 
 .heart-tip-actions .board-corner-row {
@@ -537,6 +650,7 @@ h2 {
   right: 0;
   top: 100%;
   margin-top: -26px;
+  will-change: transform;
 }
 
 .board-corner {
@@ -602,8 +716,8 @@ h2 {
   content: "";
   position: absolute;
   inset: 0;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  -webkit-mask-image: var(--shape-mask);
+  mask-image: var(--shape-mask);
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
@@ -616,15 +730,25 @@ h2 {
 /* Tranche épaisse du plateau : copie du cœur, bien plus sombre et nettement décalée */
 .board::after {
   z-index: -2;
-  background: #5e150d;
+  background: var(--shape-dark);
   transform: translateY(14px);
 }
 
 /* Face visible du plateau : dégradé plastique + ombre marquée qui suit le contour du cœur */
 .board::before {
   z-index: -1;
-  background: linear-gradient(150deg, #ff9a8c 0%, #e5493a 30%, var(--red) 60%, #8a2016 100%);
+  background: linear-gradient(150deg, var(--shape-c1) 0%, var(--shape-c2) 30%, var(--shape-c3) 60%, var(--shape-c4) 100%);
   filter: drop-shadow(0 12px 14px rgba(0, 0, 0, 0.35)) drop-shadow(0 -2px 0 rgba(255, 255, 255, 0.4));
+}
+
+/* Nervures du thème feuille : légères rayures diagonales par-dessus le dégradé,
+   toujours découpées par le même masque (donc jamais visibles hors de la forme). */
+[data-theme="feuille"] .board::before,
+[data-theme="feuille"] body::before {
+  background:
+    repeating-linear-gradient(102deg, transparent 0px, transparent 13px, rgba(0, 0, 0, 0.09) 14px, transparent 15px),
+    linear-gradient(180deg, transparent 0%, transparent 48%, rgba(0, 0, 0, 0.14) 50%, transparent 52%, transparent 100%),
+    linear-gradient(150deg, var(--shape-c1) 0%, var(--shape-c2) 30%, var(--shape-c3) 60%, var(--shape-c4) 100%);
 }
 
 .edge-top {
@@ -633,6 +757,7 @@ h2 {
 
 .edge-right {
   grid-area: right;
+  overflow: hidden;
 }
 
 .edge-bottom {
@@ -641,6 +766,7 @@ h2 {
 
 .edge-left {
   grid-area: left;
+  overflow: hidden;
 }
 
 .edge {
@@ -718,6 +844,17 @@ h2 {
   max-width: none;
   margin: 0;
   padding: 8px 6px;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  /* Les indices gauche/droite sont des <div contenteditable> (voir app.js) : un
+     <input> natif ne centre pas son texte le long de l'axe vertical en
+     writing-mode:vertical-rl, même avec text-align:center. Un bloc en flux normal,
+     lui, se centre correctement avec display:flex. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: text;
 
   writing-mode: vertical-rl;
   text-orientation: mixed;
@@ -738,9 +875,14 @@ h2 {
   appearance: none;
 }
 
-/* Input gauche : haut des lettres vers le bord gauche (extérieur). */
-
+/* Input gauche : haut des lettres vers le bord gauche (extérieur).
+   On utilise la même technique que l'indice affiché (.edge-left .edge-clue) :
+   vertical-rl + rotate(180deg), plutôt que vertical-lr + direction:rtl qui
+   affichait le texte à l'envers (ordre des lettres inversé) dans certains
+   navigateurs. Le risque de repaint différé à chaque frappe sur un champ
+   transformé est géré côté JS (forceRepaint sur l'event 'input', voir app.js). */
 .edge-left .clue-input {
+  writing-mode: vertical-rl;
   direction: ltr;
   transform: rotate(180deg);
 }
@@ -751,8 +893,11 @@ h2 {
   direction: rtl;
 }
 
-.edge-left .clue-input::placeholder,
-.edge-right .clue-input::placeholder {
+/* Placeholder des indices gauche/droite : ce sont des <div contenteditable>
+   (pas des <input>), donc pas de ::placeholder natif — on l'émule via :empty. */
+.edge-left .clue-input:empty::before,
+.edge-right .clue-input:empty::before {
+  content: attr(data-placeholder);
   color: #91aa9b;
   opacity: 0.8;
   font-family: var(--handwriting);
@@ -893,8 +1038,8 @@ h2 {
   width: 44%;
   height: 44%;
   z-index: 0;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  -webkit-mask-image: var(--shape-mask);
+  mask-image: var(--shape-mask);
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
@@ -905,12 +1050,12 @@ h2 {
 
 .clover-cell.empty::after {
   z-index: -1;
-  background: #8a1610;
+  background: var(--shape-hole-dark);
   transform: translateY(5px);
 }
 
 .clover-cell.empty::before {
-  background: linear-gradient(150deg, #ff9a8c 0%, #ff2d2d 42%, #c21f1f 100%);
+  background: linear-gradient(150deg, var(--shape-hole-c1) 0%, var(--shape-hole-c2) 42%, var(--shape-hole-c3) 100%);
   filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.35)) drop-shadow(0 -1px 0 rgba(255, 255, 255, 0.45));
 }
 
@@ -937,8 +1082,8 @@ h2 {
   margin: auto;
   width: 44%;
   height: 44%;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  -webkit-mask-image: var(--shape-mask);
+  mask-image: var(--shape-mask);
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
@@ -949,13 +1094,13 @@ h2 {
 
 .tile-heart::after {
   z-index: 0;
-  background: #8a1610;
+  background: var(--shape-hole-dark);
   transform: translateY(5px);
 }
 
 .tile-heart::before {
   z-index: 1;
-  background: linear-gradient(150deg, #ff9a8c 0%, #ff2d2d 42%, #c21f1f 100%);
+  background: linear-gradient(150deg, var(--shape-hole-c1) 0%, var(--shape-hole-c2) 42%, var(--shape-hole-c3) 100%);
   filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.35)) drop-shadow(0 -1px 0 rgba(255, 255, 255, 0.45));
 }
 
@@ -979,14 +1124,14 @@ h2 {
   /* Trou en forme de cœur au centre : on voit `.tile-heart` à travers, déjà tourné avec la tuile. */
   -webkit-mask-image:
     linear-gradient(#000, #000),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+    var(--shape-mask);
   -webkit-mask-repeat: no-repeat, no-repeat;
   -webkit-mask-position: center, center;
   -webkit-mask-size: 100% 100%, 30% 30%;
   -webkit-mask-composite: destination-out;
   mask-image:
     linear-gradient(#000, #000),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+    var(--shape-mask);
   mask-repeat: no-repeat, no-repeat;
   mask-position: center, center;
   mask-size: 100% 100%, 30% 30%;

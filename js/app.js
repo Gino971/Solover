@@ -50,7 +50,47 @@
     return raw.replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
+  /** Petite icône associée à chaque dictionnaire, pour le sélecteur de l'accueil. */
+  function dictionaryIcon(file) {
+    if (file === 'words.json') return '🍀';
+    if (/ecolo/i.test(file)) return '🌿';
+    if (/sensuel/i.test(file)) return '❤️';
+    return '📘';
+  }
+
+  // --- Système de thèmes (forme + couleurs + icône + titre) ---
+  // Chaque dictionnaire de mots a son identité visuelle propre, appliquée sur
+  // tout ce qui est visuel : plateau, trou des tuiles, icône d'app, titre d'accueil.
+  const THEMES = {
+    coeur: { title: '❤️ So lover' },
+    trefle: { title: '🍀 Trèfle &amp; Indices' },
+    feuille: { title: '🌿 So Ecolo' },
+  };
+
+  function themeForDictionary(file) {
+    if (/sensuel/i.test(file)) return 'coeur';
+    if (/ecolo/i.test(file)) return 'feuille';
+    return 'trefle';
+  }
+
+  /** Applique le thème du dictionnaire actif : attribut data-theme (toute la palette/forme
+   * suit via CSS), et favicon — le reste (titre d'accueil) se lit via currentTheme() au rendu. */
+  function applyTheme(file) {
+    const theme = themeForDictionary(file);
+    document.documentElement.dataset.theme = theme;
+    const iconHref = `icons/icon-${theme}.svg`;
+    document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]').forEach((link) => {
+      link.href = iconHref;
+    });
+    return theme;
+  }
+
+  function currentTheme() {
+    return THEMES[themeForDictionary(currentDictionaryFile)];
+  }
+
   const app = document.getElementById('app');
+  const tipActions = document.getElementById('tip-actions');
 
   /** @type {any} */
   let state = null;
@@ -61,6 +101,24 @@
     return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]));
+  }
+
+  /**
+   * Force un repaint immédiat d'un élément transformé (writing-mode vertical +
+   * rotate) sans perdre le focus ni la position du curseur. Certains navigateurs
+   * tardent à repeindre le texte d'un input tourné à chaque frappe.
+   */
+  function forceRepaint(el) {
+    const sel = (typeof el.selectionStart === 'number') ? el.selectionStart : null;
+    const selEnd = (typeof el.selectionEnd === 'number') ? el.selectionEnd : null;
+    // Lire une propriété de layout suffit généralement à forcer un reflow/repaint.
+    void el.offsetHeight;
+    el.style.transform = 'translateZ(0)';
+    void el.offsetHeight;
+    el.style.transform = '';
+    if (sel !== null && document.activeElement === el) {
+      el.setSelectionRange(sel, selEnd);
+    }
   }
 
   function freshState() {
@@ -240,6 +298,21 @@
     return { left: side(left, 'tray-side-left'), right: side(right, 'tray-side-right') };
   }
 
+  /** Sélecteur stylé du dictionnaire actif, sur l'écran d'accueil. */
+  function dictionaryPickerHTML() {
+    const cardsHTML = DICTIONARIES.map((f) => {
+      const active = f === currentDictionaryFile;
+      return `<button class="dict-card${active ? ' active' : ''}" data-action="select-dictionary" data-file="${esc(f)}" ${active ? 'disabled' : ''}>
+        <span class="dict-card-icon">${dictionaryIcon(f)}</span>
+        <span class="dict-card-label">${esc(dictionaryLabel(f))}</span>
+      </button>`;
+    }).join('');
+    return `<div class="dict-picker">
+      <p class="dict-picker-label">Thème de mots</p>
+      <div class="dict-picker-row">${cardsHTML}</div>
+    </div>`;
+  }
+
   function renderSetup() {
     const best = Storage.bestScore ? Storage.bestScore() : null;
     const nameInputs = state.players.map((name, i) => `
@@ -250,9 +323,10 @@
 
     app.innerHTML = `
       <section class="screen screen-setup">
-        <h1>❤️ So lover</h1>
+        <h1>${currentTheme().title}</h1>
         ${state.wordsLoadError ? `<p class="error-banner">⚠️ Le dictionnaire (data/${esc(currentDictionaryFile)}) n'a pas pu être chargé. Vérifiez que le fichier existe et que le jeu est servi via un serveur web (pas ouvert directement depuis le disque).</p>` : ''}
         ${best ? `<p class="best-score">Meilleur score : ${best.totalScore}/${best.maxScore} (${Math.round(best.ratio * 100)}%)</p>` : ''}
+        ${DICTIONARIES.length > 1 ? dictionaryPickerHTML() : ''}
         <h2>Joueurs (3 à 8)</h2>
         <div class="player-list">${nameInputs}</div>
         <div class="setup-actions">
@@ -333,17 +407,9 @@
 
     const countHTML = `<p class="hint">${results.length} mot${results.length > 1 ? 's' : ''}</p>`;
 
-    const dictionaryOptionsHTML = DICTIONARIES.map((f) => `
-      <option value="${esc(f)}" ${f === currentDictionaryFile ? 'selected' : ''}>${esc(dictionaryLabel(f))}</option>`).join('');
-
     return `
       <div class="rules-box words-box">
         <h3>Gérer les mots</h3>
-        ${DICTIONARIES.length > 1 ? `
-        <label class="dictionary-picker">
-          Dictionnaire actif :
-          <select class="dictionary-select">${dictionaryOptionsHTML}</select>
-        </label>` : ''}
         <p class="hint">Vos ajouts/retraits sont enregistrés dans l'app, mais n'existent pas dans le fichier <code>data/${esc(currentDictionaryFile)}</code> tant que vous ne l'avez pas remplacé.</p>
         <div class="word-export-actions">
           <button class="btn btn-secondary" data-action="export-words">💾 Exporter la liste (${esc(currentDictionaryFile)})</button>
@@ -372,18 +438,29 @@
 
   /** Accueil calé sur la pointe du cœur de fond (écrans sans plateau). `actionHTML`
    * optionnel : icône d'action principale de l'écran, placée au même endroit que sur
-   * les écrans avec plateau (voir tipButtonsRowHTML) — même emplacement partout. */
+   * les écrans avec plateau (voir tipButtonsRowHTML) — même emplacement partout.
+   * Rendu dans #tip-actions, un élément FRÈRE de #app (pas un descendant) : sur
+   * Safari, un position:fixed imbriqué dans #app (qui crée son propre contexte
+   * d'empilement via position:relative+z-index) pouvait se retrouver peint
+   * derrière d'autres éléments malgré un z-index local plus élevé — un défaut de
+   * calcul d'empilement propre à WebKit avec les contextes imbriqués. En le sortant
+   * au niveau racine, sa position dans l'empilement ne dépend plus que de son
+   * propre z-index, sans ambiguïté liée à l'imbrication. */
+  function setTipActions(innerHTML) {
+    tipActions.innerHTML = innerHTML ? `<div class="heart-tip-actions">${innerHTML}</div>` : '';
+  }
+
   function floatingHomeHTML(actionHTML) {
-    return `<div class="heart-tip-actions">${tipButtonsRowHTML(actionHTML || '')}</div>`;
+    setTipActions(tipButtonsRowHTML(actionHTML || ''));
   }
 
   function renderTransition() {
     const clueGiver = state.players[state.roundIndex % state.players.length];
     const forGuess = state.nextScreenAfterTransition === 'guess';
     const revealBtn = `<button class="corner-btn corner-btn-action" data-action="reveal" title="Révéler">👁️</button>`;
+    floatingHomeHTML(revealBtn);
     app.innerHTML = `
       <section class="screen screen-transition">
-        ${floatingHomeHTML(revealBtn)}
         <h2>Manche ${state.roundIndex + 1} / ${state.players.length}</h2>
         ${forGuess
           ? `<p class="transition-text">Passe l'appareil à tout le monde <strong>sauf ${esc(clueGiver)}</strong>.</p>`
@@ -394,8 +471,20 @@
   function renderClueGiver() {
     const clueGiver = state.players[state.roundIndex % state.players.length];
     const cluesReady = state.clues.every((c) => c.trim().length > 0);
-    const edgesHTML = state.clues.map((c, i) => `
-      <input type="text" class="clue-input" data-index="${i}" placeholder="Indice…" value="${esc(c)}" maxlength="40" />`);
+    // Indices haut/bas : <input> classique (le centrage vertical natif du navigateur suffit).
+    // Indices gauche/droite : <div contenteditable>, car en écriture verticale (vertical-rl)
+    // un <input> natif ne centre PAS son texte le long de l'axe vertical malgré
+    // text-align:center ou display:flex — limitation des navigateurs pour les contrôles de
+    // formulaire natifs. Un simple bloc en flux normal, lui, se centre correctement.
+    const edgesHTML = state.clues.map((c, i) => {
+      if (i === 1 || i === 3) {
+        return `
+      <div class="clue-input clue-input-vertical" data-index="${i}" contenteditable="true"
+           role="textbox" aria-label="Indice" data-placeholder="Indice…">${esc(c)}</div>`;
+      }
+      return `
+      <input type="text" class="clue-input" data-index="${i}" placeholder="Indice…" value="${esc(c)}" maxlength="40" />`;
+    });
     const tipHome = {
       home: homeBtnHTML(),
       verify: `<button class="corner-btn corner-btn-action" data-action="validate-clues" title="Indices prêts" ${cluesReady ? '' : 'disabled'}>➡️</button>`,
@@ -442,9 +531,9 @@
   function renderResult() {
     const isLastRound = state.roundIndex + 1 >= state.players.length;
     const continueBtn = `<button class="corner-btn corner-btn-action" data-action="continue-after-result" title="${isLastRound ? 'Voir le score final' : 'Manche suivante'}">${isLastRound ? '🏆' : '➡️'}</button>`;
+    floatingHomeHTML(continueBtn);
     app.innerHTML = `
       <section class="screen screen-result">
-        ${floatingHomeHTML(continueBtn)}
         <h2>Manche ${state.roundIndex + 1} résolue !</h2>
         <p class="round-score">${state.guess.attempts} essai${state.guess.attempts > 1 ? 's' : ''} — ${state.lastRoundScore} / 4 points</p>
         <p class="total-score">Score total : ${state.totalScore} / ${state.maxScore}</p>
@@ -454,12 +543,12 @@
   function renderFinal() {
     const rating = Game.rateScore(state.totalScore, state.maxScore);
     const actionsHTML = `<div class="corner-action-group">
-      <button class="corner-btn corner-btn-action" data-action="replay-same" title="Rejouer avec les mêmes joueurs">🔁</button>
-      <button class="corner-btn corner-btn-action" data-action="new-game" title="Nouvelle partie">➕</button>
+      <button class="corner-btn corner-btn-action" data-action="replay-same" title="Rejouer avec les mêmes joueurs">🔁️</button>
+      <button class="corner-btn corner-btn-action" data-action="new-game" title="Nouvelle partie">🆕</button>
     </div>`;
+    floatingHomeHTML(actionsHTML);
     app.innerHTML = `
       <section class="screen screen-final">
-        ${floatingHomeHTML(actionsHTML)}
         <h2>Partie terminée !</h2>
         <p class="final-emoji">${rating.emoji}</p>
         <p class="final-label">${rating.label}</p>
@@ -476,6 +565,10 @@
     }
     applyBoardRotation();
     document.body.classList.toggle('hide-board-heart', state.screen === 'words');
+    // Nettoyé par défaut ; seuls renderTransition/renderResult/renderFinal le
+    // repeuplent (voir floatingHomeHTML) — évite de laisser un vieux bouton actif
+    // sur les écrans qui n'en ont pas (accueil, indices, devinette, mots).
+    setTipActions('');
     switch (state.screen) {
       case 'setup': return renderSetup();
       case 'words': return renderWordsManagerScreen();
@@ -1119,8 +1212,10 @@
   });
 
   // --- Event delegation ---
-
-  app.addEventListener('click', (e) => {
+  // Sur document (pas #app) : les boutons d'accueil/action des écrans sans plateau
+  // (transition, score, final) vivent dans #tip-actions, un frère de #app — voir
+  // floatingHomeHTML / setTipActions plus haut.
+  document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const action = el.dataset.action;
@@ -1130,6 +1225,7 @@
       case 'start-game': return startGame();
       case 'toggle-rules': state.rulesOpen = !state.rulesOpen; return render();
       case 'open-words': state.screen = 'words'; state.wordFilterQuery = ''; return render();
+      case 'select-dictionary': return selectDictionaryAction(el.dataset.file);
       case 'set-word-filter': state.wordFilterStatus = el.dataset.filter; state.wordFilterQuery = ''; return render();
       case 'add-word': return addWordAction(el.dataset.word);
       case 'remove-custom-word': return removeCustomWordAction(el.dataset.word);
@@ -1187,19 +1283,32 @@
   document.addEventListener('pointerup', onPointerUp);
   document.addEventListener('pointercancel', onPointerCancel);
 
-  app.addEventListener('change', (e) => {
-    if (e.target.classList.contains('dictionary-select')) {
-      selectDictionaryAction(e.target.value);
-    }
-  });
-
   app.addEventListener('input', (e) => {
     if (e.target.classList.contains('player-name') && e.target.dataset.index !== undefined) {
       state.players[Number(e.target.dataset.index)] = e.target.value;
     } else if (e.target.classList.contains('clue-input')) {
-      updateClue(Number(e.target.dataset.index), e.target.value);
+      let value = e.target.isContentEditable ? e.target.textContent : e.target.value;
+      // maxlength="40" natif seulement sur <input> ; on l'émule ici pour les
+      // indices gauche/droite (<div contenteditable>).
+      if (e.target.isContentEditable && value.length > 40) {
+        value = value.slice(0, 40);
+        e.target.textContent = value;
+        const range = document.createRange();
+        range.selectNodeContents(e.target);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      updateClue(Number(e.target.dataset.index), value);
       const btn = app.querySelector('[data-action="validate-clues"]');
       if (btn) btn.disabled = !state.clues.every((c) => c.trim().length > 0);
+      // Champs verticaux (bords gauche/droit) : certains navigateurs ne repeignent
+      // pas immédiatement le texte d'un champ en writing-mode vertical + transform
+      // à chaque frappe. On force un repaint léger sans perdre le focus/curseur.
+      if (e.target.closest('.edge-left, .edge-right')) {
+        forceRepaint(e.target);
+      }
     } else if (e.target.classList.contains('word-search')) {
       state.wordFilterQuery = e.target.value;
       render();
@@ -1260,6 +1369,7 @@
       const saved = Storage.loadSelectedDictionary ? Storage.loadSelectedDictionary() : '';
       const defaultFile = DICTIONARIES.includes('words.json') ? 'words.json' : DICTIONARIES[0];
       currentDictionaryFile = DICTIONARIES.includes(saved) ? saved : defaultFile;
+      applyTheme(currentDictionaryFile);
       return loadDictionaryFile(currentDictionaryFile);
     })
     .catch((err) => {
@@ -1278,6 +1388,7 @@
     loadDictionaryFile(file)
       .then(() => {
         currentDictionaryFile = file;
+        applyTheme(file);
         if (Storage.saveSelectedDictionary) Storage.saveSelectedDictionary(file);
         state.wordsLoadError = false;
         render();
