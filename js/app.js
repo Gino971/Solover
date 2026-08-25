@@ -1040,10 +1040,12 @@
     dragState.ghostEl = ghost;
   }
 
+  /** Le fantôme garde le point de saisie sous le curseur : la tuile ne se recentre pas
+   * brusquement au démarrage du glissement, et le curseur reste toujours dessus. */
   function positionDragGhost(x, y) {
     if (!dragState.ghostEl) return;
-    dragState.ghostEl.style.left = `${x - dragState.width / 2}px`;
-    dragState.ghostEl.style.top = `${y - dragState.height / 2}px`;
+    dragState.ghostEl.style.left = `${x - dragState.grabX}px`;
+    dragState.ghostEl.style.top = `${y - dragState.grabY}px`;
   }
 
   function clearDropHighlight() {
@@ -1092,6 +1094,10 @@
     return !!(target.closest && target.closest('input, textarea, [contenteditable="true"]'));
   }
 
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
   function clickRotatesClockwise(el, clientX) {
     const rect = el.getBoundingClientRect();
     return (clientX - rect.left) > rect.width / 2;
@@ -1130,14 +1136,20 @@
       return;
     }
     const rect = sourceEl.getBoundingClientRect();
+    // offsetWidth/Height = taille de mise en page, sans les transformations (les tuiles de la
+    // pioche sont légèrement pivotées : leur getBoundingClientRect est plus grand qu'elles).
+    const width = sourceEl.offsetWidth || rect.width;
+    const height = sourceEl.offsetHeight || rect.height;
     dragState = {
       source,
       tileId,
       sourceEl,
       startX: e.clientX,
       startY: e.clientY,
-      width: rect.width,
-      height: rect.height,
+      width,
+      height,
+      grabX: clamp(e.clientX - rect.left - (rect.width - width) / 2, 0, width),
+      grabY: clamp(e.clientY - rect.top - (rect.height - height) / 2, 0, height),
       moved: false,
       ghostEl: null,
     };
