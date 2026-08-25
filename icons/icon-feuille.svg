@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="leafFill" x1="10%" y1="0%" x2="90%" y2="100%">
+      <stop offset="0%" stop-color="#8fce6a"/>
+      <stop offset="45%" stop-color="#4c8c3f"/>
+      <stop offset="100%" stop-color="#2e5c26"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="20" fill="#eef7ea"/>
+  <path d="M50,84 C28,72 20,48 28,24 C34,10 50,4 50,4 C50,4 66,10 72,24 C80,48 72,72 50,84 Z" fill="url(#leafFill)"/>
+  <path d="M50,80 L50,10" stroke="#1e3d19" stroke-width="2" fill="none" opacity="0.55"/>
+  <path d="M50,30 L34,20 M50,42 L32,34 M50,54 L34,48 M50,30 L66,20 M50,42 L68,34 M50,54 L66,48" stroke="#1e3d19" stroke-width="1.4" fill="none" opacity="0.4"/>
+</svg>
