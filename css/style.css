@@ -57,7 +57,7 @@
 
 /* Thème « feuille » (dictionnaire So Ecolo) */
 [data-theme="feuille"] {
-  --shape-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='6 -4 88 106'%3E%3Cpath d='M50,98 C22,82 10,52 22,18 C30,0 50,0 50,0 C50,0 70,0 78,18 C90,52 78,82 50,98 Z'/%3E%3C/svg%3E");
+  --shape-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='12 0 76 92'%3E%3Cpath d='M50,88 C50,74 44,66 44,66 C24,64 14,44 20,22 C26,2 50,6 50,6 C50,6 74,2 80,22 C86,44 76,64 56,66 C56,66 50,74 50,88 Z'/%3E%3C/svg%3E");
   --shape-c1: #b9e08a;
   --shape-c2: #7cb342;
   --shape-c3: #4c8c3f;
@@ -619,7 +619,7 @@ h2 {
   justify-content: space-between;
   align-items: center;
   padding: 0 17%;
-  margin-top: -26px;
+  margin-top: -134px;
   position: relative;
   z-index: 6;
   pointer-events: none;
@@ -649,7 +649,7 @@ h2 {
   left: 0;
   right: 0;
   top: 100%;
-  margin-top: -26px;
+  margin-top: -134px;
   will-change: transform;
 }
 
@@ -741,13 +741,22 @@ h2 {
   filter: drop-shadow(0 12px 14px rgba(0, 0, 0, 0.35)) drop-shadow(0 -2px 0 rgba(255, 255, 255, 0.4));
 }
 
-/* Nervures du thème feuille : légères rayures diagonales par-dessus le dégradé,
-   toujours découpées par le même masque (donc jamais visibles hors de la forme). */
+/* Nervures du thème feuille : reflet brillant + nervure centrale unique, dans le même
+   esprit "plastique" que l'icône choisie (feuille A) — toujours découpés par le même
+   masque (donc jamais visibles hors de la forme). */
 [data-theme="feuille"] .board::before,
 [data-theme="feuille"] body::before {
   background:
-    repeating-linear-gradient(102deg, transparent 0px, transparent 13px, rgba(0, 0, 0, 0.09) 14px, transparent 15px),
-    linear-gradient(180deg, transparent 0%, transparent 48%, rgba(0, 0, 0, 0.14) 50%, transparent 52%, transparent 100%),
+    radial-gradient(ellipse 90px 55px at 32% 18%, rgba(255, 255, 255, 0.55) 0%, transparent 65%),
+    linear-gradient(90deg, transparent 0%, transparent 48.6%, rgba(0, 0, 0, 0.28) 49.6%, rgba(0, 0, 0, 0.28) 50.4%, transparent 51.4%, transparent 100%),
+    linear-gradient(150deg, var(--shape-c1) 0%, var(--shape-c2) 30%, var(--shape-c3) 60%, var(--shape-c4) 100%);
+}
+
+/* Reflet brillant du thème trèfle, même esprit "plastique" que l'icône choisie (trèfle A). */
+[data-theme="trefle"] .board::before,
+[data-theme="trefle"] body::before {
+  background:
+    radial-gradient(ellipse 70px 45px at 28% 22%, rgba(255, 255, 255, 0.6) 0%, transparent 60%),
     linear-gradient(150deg, var(--shape-c1) 0%, var(--shape-c2) 30%, var(--shape-c3) 60%, var(--shape-c4) 100%);
 }
 

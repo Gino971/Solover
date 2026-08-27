@@ -1,10 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="cloverFill" x1="10%" y1="0%" x2="90%" y2="100%">
+      <stop offset="0%" stop-color="#8fd9ab"/>
+      <stop offset="30%" stop-color="#4caf7d"/>
+      <stop offset="60%" stop-color="#2e8b57"/>
+      <stop offset="100%" stop-color="#1b5e3a"/>
+    </linearGradient>
+  </defs>
   <rect width="100" height="100" rx="20" fill="#eaf7ee"/>
-  <g fill="#2e8b57">
+  <g transform="translate(0,6)" fill="#123d27">
     <circle cx="38" cy="38" r="18"/>
     <circle cx="62" cy="38" r="18"/>
     <circle cx="38" cy="62" r="18"/>
     <circle cx="62" cy="62" r="18"/>
+    <rect x="44" y="55" width="12" height="42" rx="6"/>
   </g>
-  <rect x="47" y="55" width="6" height="30" rx="3" fill="#1b5e3a"/>
+  <g fill="url(#cloverFill)" style="filter:drop-shadow(0 6px 5px rgba(0,0,0,0.35)) drop-shadow(0 -2px 0 rgba(255,255,255,0.3));">
+    <circle cx="38" cy="38" r="18"/>
+    <circle cx="62" cy="38" r="18"/>
+    <circle cx="38" cy="62" r="18"/>
+    <circle cx="62" cy="62" r="18"/>
+    <rect x="44" y="55" width="12" height="42" rx="6"/>
+  </g>
+  <ellipse cx="32" cy="32" rx="7" ry="4" fill="#ffffff" opacity="0.4" transform="rotate(-35 32 32)"/>
 </svg>
