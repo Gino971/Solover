@@ -636,7 +636,7 @@ h2 {
   justify-content: space-between;
   align-items: center;
   padding: 0 17%;
-  margin-top: -134px;
+  margin-top: -60px;
   position: relative;
   z-index: 6;
   pointer-events: none;
@@ -666,7 +666,7 @@ h2 {
   left: 0;
   right: 0;
   top: 100%;
-  margin-top: -134px;
+  margin-top: -60px;
   will-change: transform;
 }
 
