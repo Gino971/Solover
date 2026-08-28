@@ -10,18 +10,20 @@
   --tile-size: 185px;
 
   /* Système de thèmes : forme + palette changent selon le dictionnaire de mots actif
-     (voir applyTheme() dans js/app.js et les blocs [data-theme="..."] ci-dessous). */
-  --shape-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
-  --shape-c1: #ff9a8c;
-  --shape-c2: #e5493a;
-  --shape-c3: #c0392b;
-  --shape-c4: #8a2016;
-  --shape-dark: #5e150d;
-  --shape-hole-c1: #ff9a8c;
-  --shape-hole-c2: #ff2d2d;
-  --shape-hole-c3: #c21f1f;
-  --shape-hole-dark: #8a1610;
-  --shape-bg: #fdeceb;
+     (voir applyTheme() dans js/app.js et les blocs [data-theme="..."] ci-dessous).
+     Valeurs par défaut = thème "trèfle" (dictionnaire So Lover, chargé par défaut au
+     lancement), pour éviter un flash de la forme cœur avant que le JS ne s'exécute. */
+  --shape-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='14 14 72 89'%3E%3Ccircle cx='38' cy='38' r='18'/%3E%3Ccircle cx='62' cy='38' r='18'/%3E%3Ccircle cx='38' cy='62' r='18'/%3E%3Ccircle cx='62' cy='62' r='18'/%3E%3Crect x='44' y='55' width='12' height='42' rx='6'/%3E%3C/svg%3E");
+  --shape-c1: #8fd9ab;
+  --shape-c2: #4caf7d;
+  --shape-c3: #2e8b57;
+  --shape-c4: #1b5e3a;
+  --shape-dark: #123d27;
+  --shape-hole-c1: #8fd9ab;
+  --shape-hole-c2: #45a06e;
+  --shape-hole-c3: #1f6b45;
+  --shape-hole-dark: #0f2f1c;
+  --shape-bg: #eaf7ee;
 
   --handwriting:
     "Segoe Print",
@@ -38,6 +40,21 @@
     Helvetica,
     Arial,
     sans-serif;
+}
+
+/* Thème « cœur » (dictionnaire So Sensuel) */
+[data-theme="coeur"] {
+  --shape-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 29.6'%3E%3Cpath d='M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4 c0,9.4,9.5,11.9,16,21.2c6.5-9.3,16-11.8,16-21.2C32,3.8,28.2,0,23.6,0z'/%3E%3C/svg%3E");
+  --shape-c1: #ff9a8c;
+  --shape-c2: #e5493a;
+  --shape-c3: #c0392b;
+  --shape-c4: #8a2016;
+  --shape-dark: #5e150d;
+  --shape-hole-c1: #ff9a8c;
+  --shape-hole-c2: #ff2d2d;
+  --shape-hole-c3: #c21f1f;
+  --shape-hole-dark: #8a1610;
+  --shape-bg: #fdeceb;
 }
 
 /* Thème « trèfle » (dictionnaire général, words.json) */

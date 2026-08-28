@@ -45,7 +45,7 @@
 
   /** Nom lisible pour un fichier dictionnaire (ex. "words-enfants.json" -> "words enfants"). */
   function dictionaryLabel(file) {
-    if (file === 'words.json') return 'Dictionnaire complet';
+    if (file === 'words.json') return 'So Lover';
     const raw = file.replace(/\.json$/i, '').replace(/[-_]+/g, ' ');
     return raw.replace(/\b\w/g, (c) => c.toUpperCase());
   }
@@ -1384,9 +1384,8 @@
   discoverDictionaryFiles()
     .then((files) => {
       DICTIONARIES = files;
-      const saved = Storage.loadSelectedDictionary ? Storage.loadSelectedDictionary() : '';
       const defaultFile = DICTIONARIES.includes('words.json') ? 'words.json' : DICTIONARIES[0];
-      currentDictionaryFile = DICTIONARIES.includes(saved) ? saved : defaultFile;
+      currentDictionaryFile = defaultFile;
       applyTheme(currentDictionaryFile);
       return loadDictionaryFile(currentDictionaryFile);
     })
