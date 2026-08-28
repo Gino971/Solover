@@ -1012,14 +1012,44 @@
 
   function findDropTarget(x, y) {
     const el = document.elementFromPoint(x, y);
-    if (!el) return null;
-    const slotEl = el.closest('.clover-cell');
-    if (slotEl && app.contains(slotEl)) {
-      return { type: 'slot', slotIndex: Number(slotEl.dataset.slot) };
+    if (el) {
+      const slotEl = el.closest('.clover-cell');
+      if (slotEl && app.contains(slotEl)) {
+        return { type: 'slot', slotIndex: Number(slotEl.dataset.slot) };
+      }
+      const trayEl = el.closest('.tray');
+      if (trayEl && app.contains(trayEl)) {
+        return { type: 'tray', trayEl };
+      }
     }
-    const trayEl = el.closest('.tray');
-    if (trayEl && app.contains(trayEl)) {
-      return { type: 'tray', trayEl };
+    // Dépôt tolérant : si on relâche n'importe où sur le plateau (entre deux cases, sur
+    // le fond, etc.) sans être pile sur une case, on prend la case la plus proche du point
+    // de lâcher plutôt que d'annuler le déplacement — la tuile "reste où on la lâche".
+    const boardEl = app.querySelector('.board');
+    let inBoard = false;
+    if (boardEl) {
+      const boardRect = boardEl.getBoundingClientRect();
+      inBoard = x >= boardRect.left && x <= boardRect.right && y >= boardRect.top && y <= boardRect.bottom;
+      if (inBoard) {
+        let best = null;
+        let bestDist = Infinity;
+        app.querySelectorAll('.clover-cell').forEach((cell) => {
+          const r = cell.getBoundingClientRect();
+          const cx = r.left + r.width / 2;
+          const cy = r.top + r.height / 2;
+          const d = Math.hypot(x - cx, y - cy);
+          if (d < bestDist) {
+            bestDist = d;
+            best = cell;
+          }
+        });
+        if (best) return { type: 'slot', slotIndex: Number(best.dataset.slot) };
+      }
+    }
+    // En dehors du plateau (n'importe où sur la page, pas seulement sur le bac visible) :
+    // on considère que la tuile est reposée hors du plateau, donc renvoyée au bac.
+    if (!inBoard) {
+      return { type: 'tray', trayEl: app.querySelector('.tray') };
     }
     return null;
   }
