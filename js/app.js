@@ -141,7 +141,7 @@
       nextScreenAfterTransition: '',
       rulesOpen: false,
       wordFilterQuery: '',
-      wordFilterStatus: 'custom',
+      wordFilterStatus: 'all',
       boardRotation: 0,
     };
   }
@@ -163,7 +163,7 @@
   }
 
   function normalizeCard(card) {
-    return card.map((word) => String(word));
+    return Array.isArray(card) ? card.slice(0, 4).map((word) => String(word || '').trim()) : [];
   }
 
   function uniqueWordsFromCards(cards) {
@@ -180,51 +180,122 @@
     return words;
   }
 
-  function dictionaryHasWord(word) {
-    const key = normalizeWord(word);
-    if (!key) return false;
-    return WORDS.some((candidate) => normalizeWord(candidate) === key);
+  function isValidCard(card) {
+    const words = normalizeCard(card);
+    return words.length === 4 && words.every((word) => normalizeWord(word));
+  }
+
+  function cardSignature(card) {
+    return normalizeCard(card).map((word) => normalizeWord(word)).join('\u0001');
+  }
+
+  function loadCustomCards() {
+    return Storage.loadCustomCards ? Storage.loadCustomCards(currentDictionaryFile) : [];
+  }
+
+  function saveCustomCards(list) {
+    if (!Storage.saveCustomCards) return [];
+    return Storage.saveCustomCards(currentDictionaryFile, list);
+  }
+
+  function loadRemovedCards() {
+    return Storage.loadRemovedCards ? Storage.loadRemovedCards(currentDictionaryFile) : [];
+  }
+
+  function saveRemovedCards(list) {
+    if (!Storage.saveRemovedCards) return [];
+    return Storage.saveRemovedCards(currentDictionaryFile, list);
+  }
+
+  function currentDictionaryCards() {
+    return RAW_DICTIONARY.filter(isValidCard).map(normalizeCard);
+  }
+
+  function getManagedCardDeck() {
+    if (!DICTIONARY_IS_CARD_DECK) return WORDS;
+    const removed = new Set(loadRemovedCards().map(cardSignature));
+    const seen = new Set();
+    const deck = [];
+
+    currentDictionaryCards().forEach((card) => {
+      const signature = cardSignature(card);
+      if (removed.has(signature) || seen.has(signature)) return;
+      seen.add(signature);
+      deck.push(card);
+    });
+
+    loadCustomCards().forEach((card) => {
+      const signature = cardSignature(card);
+      if (removed.has(signature) || seen.has(signature)) return;
+      seen.add(signature);
+      deck.push(normalizeCard(card));
+    });
+
+    return deck;
   }
 
   function currentGameDictionary() {
-    return DICTIONARY_IS_CARD_DECK ? RAW_DICTIONARY : WORDS;
+    return getManagedCardDeck();
   }
 
-  function getWordList() {
-    const removed = new Set((Storage.loadRemovedWords ? Storage.loadRemovedWords() : []).map((w) => normalizeWord(w)));
-    const custom = Storage.loadCustomWords ? Storage.loadCustomWords() : [];
-    const base = WORDS.filter((w) => !removed.has(normalizeWord(w)));
-    custom.forEach((w) => {
-      const key = normalizeWord(w);
-      if (!removed.has(key) && !base.some((candidate) => normalizeWord(candidate) === key)) base.push(w);
-    });
-    return base;
+  function cardMatchesQuery(card, query) {
+    const normalizedQuery = normalizeWord(query);
+    if (!normalizedQuery) return false;
+    return normalizeCard(card).some((word) => normalizeWord(word).includes(normalizedQuery));
   }
 
-  /** Construit la liste de mots { word, status } selon le filtre de statut et le texte de recherche. */
-  function getFilteredWords() {
-    const removed = Storage.loadRemovedWords ? Storage.loadRemovedWords() : [];
-    const rawCustom = Storage.loadCustomWords ? Storage.loadCustomWords() : [];
-    const custom = rawCustom.filter((w) => !dictionaryHasWord(w));
-    const removedSet = new Set(removed.map((w) => normalizeWord(w)));
+  function cardLabel(card) {
+    return normalizeCard(card).join(' · ');
+  }
+
+  function parseCardInput(value) {
+    const text = String(value || '').trim();
+    if (!text) return [];
+    const words = text
+      .split(/[\n,;|]+|\s{2,}/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    return words.length === 4 ? words : [];
+  }
+
+  function decodeCardData(value) {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return normalizeCard(parsed);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /** Construit la liste de cartes { card, status } selon le filtre de statut et le texte de recherche. */
+  function getFilteredCards() {
+    const removed = loadRemovedCards();
+    const custom = loadCustomCards();
+    const removedSet = new Set(removed.map((card) => cardSignature(card)));
     const status = state.wordFilterStatus;
     let items;
     if (status === 'custom') {
-      items = custom.map((w) => ({ word: w, status: 'custom' }));
+      items = custom.map((card) => ({ card: normalizeCard(card), status: 'custom' }));
     } else if (status === 'removed') {
-      items = removed.map((w) => ({ word: w, status: 'removed' }));
+      items = removed.map((card) => ({ card: normalizeCard(card), status: 'removed' }));
     } else if (status === 'dictionary') {
-      items = WORDS.filter((w) => !removedSet.has(normalizeWord(w))).map((w) => ({ word: w, status: 'dictionary' }));
-    } else if (status === 'verbs') {
-      items = WORDS.filter((w) => !removedSet.has(normalizeWord(w)) && isLikelyConjugatedVerb(w)).map((w) => ({ word: w, status: 'dictionary' }));
+      items = currentDictionaryCards()
+        .filter((card) => !removedSet.has(cardSignature(card)))
+        .map((card) => ({ card, status: 'dictionary' }));
+    } else if (status === 'all') {
+      items = currentDictionaryCards()
+        .filter((card) => !removedSet.has(cardSignature(card)))
+        .map((card) => ({ card, status: 'dictionary' }))
+        .concat(custom.map((card) => ({ card: normalizeCard(card), status: 'custom' })))
+        .concat(removed.map((card) => ({ card: normalizeCard(card), status: 'removed' })));
     } else {
-      items = WORDS.filter((w) => !removedSet.has(normalizeWord(w))).map((w) => ({ word: w, status: 'dictionary' }))
-        .concat(custom.map((w) => ({ word: w, status: 'custom' })))
-        .concat(removed.map((w) => ({ word: w, status: 'removed' })));
+      items = currentDictionaryCards()
+        .filter((card) => !removedSet.has(cardSignature(card)))
+        .map((card) => ({ card, status: 'dictionary' }));
     }
     const query = state.wordFilterQuery.trim().toLowerCase();
-    if (query) items = items.filter((it) => it.word.includes(query));
-    items.sort((a, b) => a.word.localeCompare(b.word, 'fr'));
+    if (query) items = items.filter((it) => cardMatchesQuery(it.card, query));
     return items;
   }
 
@@ -403,64 +474,72 @@
   }
 
   function renderWordsManager() {
-    const removed = Storage.loadRemovedWords ? Storage.loadRemovedWords() : [];
-    const custom = (Storage.loadCustomWords ? Storage.loadCustomWords() : []).filter((w) => !dictionaryHasWord(w));
+    const removed = loadRemovedCards();
+    const custom = loadCustomCards();
     const rawQuery = state.wordFilterQuery || '';
     const query = normalizeWord(rawQuery);
-    const canEditWords = !DICTIONARY_IS_CARD_DECK;
+    const parsedCard = parseCardInput(rawQuery);
+    const canEditCards = DICTIONARY_IS_CARD_DECK;
 
     let addSuggestionHTML = '';
-    if (rawQuery.trim() && !query) {
-      addSuggestionHTML = `<p class="word-search-result">Mot invalide (lettres uniquement).</p>`;
-    } else if (DICTIONARY_IS_CARD_DECK) {
-      addSuggestionHTML = '<p class="word-search-result">Ce dictionnaire est au format cartes de 4 mots. La gestion carte par carte est désactivée ici.</p>';
-    } else if (query && !dictionaryHasWord(query) && !custom.includes(query) && !removed.includes(query)) {
-      addSuggestionHTML = `<p class="word-search-result">« ${esc(query)} » n'existe pas encore.
-        <button class="btn btn-secondary" data-action="add-word" data-word="${esc(query)}">+ Ajouter ce mot</button></p>`;
+    if (DICTIONARY_IS_CARD_DECK) {
+      if (rawQuery.trim() && parsedCard.length !== 4) {
+        addSuggestionHTML = `<p class="word-search-result">Carte invalide : saisis 4 mots séparés par des virgules, des retours à la ligne ou des espaces doubles.</p>`;
+      } else if (parsedCard.length === 4) {
+        const signature = cardSignature(parsedCard);
+        const exists = currentDictionaryCards().some((card) => cardSignature(card) === signature)
+          || custom.some((card) => cardSignature(card) === signature)
+          || removed.some((card) => cardSignature(card) === signature);
+        if (!exists) {
+          addSuggestionHTML = `<p class="word-search-result">Carte prête.
+            <button class="btn btn-secondary" data-action="add-card" data-card='${esc(JSON.stringify(parsedCard))}'>+ Ajouter cette carte</button></p>`;
+        }
+      }
+    } else if (query) {
+      addSuggestionHTML = '<p class="word-search-result">Ce dictionnaire n’est pas au format cartes de 4 mots.</p>';
     }
 
     const filters = [
-      { key: 'custom', label: `Ajoutés (${custom.length})` },
+      { key: 'custom', label: `Ajoutées (${custom.length})` },
       { key: 'dictionary', label: 'Dictionnaire' },
-      { key: 'verbs', label: 'Verbes conjugués' },
-      { key: 'removed', label: `Retirés (${removed.length})` },
+      { key: 'removed', label: `Retirées (${removed.length})` },
       { key: 'all', label: 'Tous' },
     ];
     const filterButtonsHTML = filters.map((f) => `
       <button class="btn btn-filter ${state.wordFilterStatus === f.key ? 'btn-primary' : 'btn-secondary'}" data-action="set-word-filter" data-filter="${f.key}">${f.label}</button>`).join('');
 
-    const results = getFilteredWords();
+    const results = getFilteredCards();
     const removableCount = results.filter((it) => it.status === 'dictionary').length;
-    const verbsNoticeHTML = state.wordFilterStatus === 'verbs'
-      ? `<p class="hint">Détection automatique par terminaisons (imparfait, futur, passé simple…), approximative : vérifiez avant de tout retirer, vous pourrez toujours remettre un mot depuis l'onglet « Retirés ».</p>
-         ${removableCount ? `<button class="btn btn-secondary btn-bulk" data-action="exclude-all-filtered">Retirer ces ${removableCount} mots</button>` : ''}`
+    const bulkActionHTML = removableCount
+      ? `<button class="btn btn-secondary btn-bulk" data-action="exclude-all-filtered">Retirer ces ${removableCount} cartes</button>`
       : '';
     const rowsHTML = results.length ? results.map((item) => {
-      const action = item.status === 'dictionary' ? 'exclude-word' : (item.status === 'custom' ? 'remove-custom-word' : 'restore-word');
+      const action = item.status === 'dictionary' ? 'exclude-card' : (item.status === 'custom' ? 'remove-custom-card' : 'restore-card');
       const icon = item.status === 'removed' ? '↺' : '✕';
       const title = item.status === 'removed' ? 'Remettre' : 'Retirer';
-      return `<div class="word-cell word-cell--${item.status}">
-        <span>${esc(item.word)}</span>
-        <button class="word-cell-btn" ${canEditWords ? `data-action="${action}" data-word="${esc(item.word)}"` : 'disabled'} title="${title}">${icon}</button>
+      const wordsHTML = normalizeCard(item.card).map((word) => `<span class="card-word">${esc(word)}</span>`).join('');
+      return `<div class="word-cell card-cell word-cell--${item.status}">
+        <div class="card-preview">${wordsHTML}</div>
+        <button class="word-cell-btn" ${canEditCards ? `data-action="${action}" data-card='${esc(JSON.stringify(item.card))}'` : 'disabled'} title="${title}">${icon}</button>
       </div>`;
-    }).join('') : '<p class="hint">Aucun mot ne correspond à ce filtre.</p>';
+    }).join('') : '<p class="hint">Aucune carte ne correspond à ce filtre.</p>';
 
-    const countHTML = `<p class="hint">${results.length} mot${results.length > 1 ? 's' : ''}</p>`;
+    const countHTML = `<p class="hint">${results.length} carte${results.length > 1 ? 's' : ''}</p>`;
 
     return `
       <div class="rules-box words-box">
-        <h3>${DICTIONARY_IS_CARD_DECK ? 'Gérer les cartes' : 'Gérer les mots'}</h3>
+        <h3>Gérer les cartes</h3>
         <p class="hint">Vos ajouts/retraits sont enregistrés dans l'app, mais n'existent pas dans le fichier <code>data/${esc(currentDictionaryFile)}</code> tant que vous ne l'avez pas remplacé.</p>
-        ${DICTIONARY_IS_CARD_DECK ? '<p class="hint">Ce dictionnaire est basé sur des cartes de 4 mots : l’édition carte par carte est désactivée ici.</p>' : ''}
+        <p class="hint">Chaque carte doit contenir exactement 4 mots.</p>
         <div class="word-export-actions">
-          <button class="btn btn-secondary" data-action="export-words">💾 Exporter le fichier (${esc(currentDictionaryFile)})</button>
-          ${(!DICTIONARY_IS_CARD_DECK && (custom.length || removed.length)) ? `<button class="btn-link" data-action="reset-word-overrides">Effacer mes ajustements (après export)</button>` : ''}
+          <button class="btn btn-secondary" data-action="export-words">💾 Exporter les cartes (${esc(currentDictionaryFile)})</button>
+          ${(custom.length || removed.length) ? `<button class="btn-link" data-action="reset-word-overrides">Effacer mes ajustements (après export)</button>` : ''}
         </div>
-        <p class="hint">Filtrez la liste ci-dessous, ou tapez un mot pour l'ajouter s'il n'existe pas encore.</p>
+        <p class="hint">Filtrez la liste ci-dessous, ou saisissez 4 mots pour ajouter une carte s'ils n'existent pas encore.</p>
         <div class="word-filters">${filterButtonsHTML}</div>
-        <input type="text" class="word-search" placeholder="Filtrer ou ajouter un mot…" value="${esc(rawQuery)}" maxlength="24" />
+        <input type="text" class="word-search" placeholder="Filtrer ou ajouter une carte…" value="${esc(rawQuery)}" maxlength="120" />
         ${addSuggestionHTML}
-        ${verbsNoticeHTML}
+        ${bulkActionHTML}
         ${countHTML}
         <div class="word-results">${rowsHTML}</div>
       </div>`;
@@ -637,62 +716,31 @@
   }
 
   function addWordAction(word) {
-    if (DICTIONARY_IS_CARD_DECK) return;
-    const w = normalizeWord(word);
-    if (!w || !Storage.loadCustomWords || !Storage.saveCustomWords) return;
-    if (!dictionaryHasWord(w)) {
-      const custom = Storage.loadCustomWords();
-      if (!custom.includes(w)) {
-        custom.push(w);
-        Storage.saveCustomWords(custom);
-      }
-    }
-    // si le mot avait été retiré, on annule ce retrait
-    if (Storage.loadRemovedWords && Storage.saveRemovedWords) {
-      const removed = Storage.loadRemovedWords().filter((x) => x !== w);
-      Storage.saveRemovedWords(removed);
-    }
-    state.wordFilterQuery = '';
-    render();
+    return addCardAction(word);
   }
 
   function removeCustomWordAction(word) {
-    if (DICTIONARY_IS_CARD_DECK) return;
-    if (!Storage.loadCustomWords || !Storage.saveCustomWords) return;
-    const custom = Storage.loadCustomWords().filter((w) => w !== word);
-    Storage.saveCustomWords(custom);
-    render();
+    return removeCustomCardAction(word);
   }
 
   function excludeWordAction(word) {
-    if (DICTIONARY_IS_CARD_DECK) return;
-    const w = normalizeWord(word);
-    if (!w || !Storage.loadRemovedWords || !Storage.saveRemovedWords) return;
-    const removed = Storage.loadRemovedWords();
-    if (!removed.includes(w)) {
-      removed.push(w);
-      Storage.saveRemovedWords(removed);
-    }
-    render();
+    return excludeCardAction(word);
   }
 
   function restoreWordAction(word) {
-    if (DICTIONARY_IS_CARD_DECK) return;
-    if (!Storage.loadRemovedWords || !Storage.saveRemovedWords) return;
-    const removed = Storage.loadRemovedWords().filter((w) => w !== word);
-    Storage.saveRemovedWords(removed);
-    render();
+    return restoreCardAction(word);
   }
 
-  /** Retire d'un coup tous les mots du dictionnaire actuellement filtrés (ex: tous les verbes conjugués détectés). */
+  /** Retire d'un coup toutes les cartes du dictionnaire actuellement filtrées. */
   function excludeAllFilteredAction() {
-    if (DICTIONARY_IS_CARD_DECK) return;
-    if (!Storage.loadRemovedWords || !Storage.saveRemovedWords) return;
-    const toRemove = getFilteredWords().filter((it) => it.status === 'dictionary').map((it) => it.word);
+    const toRemove = getFilteredCards().filter((it) => it.status === 'dictionary').map((it) => it.card);
     if (!toRemove.length) return;
-    const removed = Storage.loadRemovedWords();
-    toRemove.forEach((w) => { if (!removed.includes(w)) removed.push(w); });
-    Storage.saveRemovedWords(removed);
+    const removed = loadRemovedCards();
+    toRemove.forEach((card) => {
+      const signature = cardSignature(card);
+      if (!removed.some((existing) => cardSignature(existing) === signature)) removed.push(card);
+    });
+    saveRemovedCards(removed);
     render();
   }
 
@@ -702,9 +750,7 @@
    * manuellement le fichier de données par celui téléchargé.
    */
   function exportWordsAction() {
-    const body = DICTIONARY_IS_CARD_DECK
-      ? `${JSON.stringify(RAW_DICTIONARY, null, 2)}\n`
-      : `${JSON.stringify(Array.from(new Set(getWordList())).sort((a, b) => a.localeCompare(b, 'fr')), null, 2)}\n`;
+    const body = `${JSON.stringify(getManagedCardDeck(), null, 2)}\n`;
     const blob = new Blob([body], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -718,10 +764,51 @@
 
   /** Efface les ajouts/retraits enregistrés dans l'app, une fois qu'ils ont été intégrés au fichier exporté. */
   function resetWordOverridesAction() {
-    const ok = window.confirm('Effacer les mots ajoutés/retirés enregistrés dans cette app ?\n\nÀ faire seulement après avoir remplacé le fichier de données par le fichier exporté, sinon vos ajustements seront perdus.');
+    const ok = window.confirm('Effacer les cartes ajoutées/retirées enregistrées dans cette app ?\n\nÀ faire seulement après avoir remplacé le fichier de données par le fichier exporté, sinon vos ajustements seront perdus.');
     if (!ok) return;
-    if (Storage.saveCustomWords) Storage.saveCustomWords([]);
-    if (Storage.saveRemovedWords) Storage.saveRemovedWords([]);
+    saveCustomCards([]);
+    saveRemovedCards([]);
+    render();
+  }
+
+  function addCardAction(raw) {
+    const card = decodeCardData(raw).length === 4 ? decodeCardData(raw) : parseCardInput(raw);
+    if (!isValidCard(card)) return;
+    const signature = cardSignature(card);
+    const custom = loadCustomCards();
+    const removed = loadRemovedCards();
+    if (!custom.some((existing) => cardSignature(existing) === signature)) {
+      custom.push(card);
+      saveCustomCards(custom);
+    }
+    saveRemovedCards(removed.filter((existing) => cardSignature(existing) !== signature));
+    state.wordFilterQuery = '';
+    render();
+  }
+
+  function removeCustomCardAction(raw) {
+    const card = decodeCardData(raw);
+    const signature = cardSignature(card);
+    saveCustomCards(loadCustomCards().filter((existing) => cardSignature(existing) !== signature));
+    render();
+  }
+
+  function excludeCardAction(raw) {
+    const card = decodeCardData(raw);
+    const signature = cardSignature(card);
+    const removed = loadRemovedCards();
+    if (!removed.some((card) => cardSignature(card) === signature)) {
+      const sourceCard = getManagedCardDeck().find((entry) => cardSignature(entry) === signature) || card;
+      removed.push(normalizeCard(sourceCard));
+      saveRemovedCards(removed);
+    }
+    render();
+  }
+
+  function restoreCardAction(raw) {
+    const card = decodeCardData(raw);
+    const signature = cardSignature(card);
+    saveRemovedCards(loadRemovedCards().filter((existing) => cardSignature(existing) !== signature));
     render();
   }
 
@@ -1322,10 +1409,10 @@
       case 'open-words': state.screen = 'words'; state.wordFilterQuery = ''; return render();
       case 'select-dictionary': return selectDictionaryAction(el.dataset.file);
       case 'set-word-filter': state.wordFilterStatus = el.dataset.filter; state.wordFilterQuery = ''; return render();
-      case 'add-word': return addWordAction(el.dataset.word);
-      case 'remove-custom-word': return removeCustomWordAction(el.dataset.word);
-      case 'exclude-word': return excludeWordAction(el.dataset.word);
-      case 'restore-word': return restoreWordAction(el.dataset.word);
+      case 'add-card': return addCardAction(el.dataset.card);
+      case 'remove-custom-card': return removeCustomCardAction(el.dataset.card);
+      case 'exclude-card': return excludeCardAction(el.dataset.card);
+      case 'restore-card': return restoreCardAction(el.dataset.card);
       case 'exclude-all-filtered': return excludeAllFilteredAction();
       case 'export-words': return exportWordsAction();
       case 'reset-word-overrides': return resetWordOverridesAction();
