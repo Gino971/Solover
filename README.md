@@ -35,4 +35,6 @@ Dépose un fichier `.json` (liste de mots) dans `data/`, puis lance :
 node tools/update-dictionaries.js
 ```
 
-Il apparaîtra dans le menu déroulant du jeu (écran « Gérer les mots »).
+Il apparaîtra dans le menu déroulant du jeu (écran « Gérer les cartes » ou « Gérer les mots » selon le dictionnaire actif).
+
+Le dictionnaire principal du jeu est maintenant `data/So lover.json`.

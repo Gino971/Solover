@@ -31,7 +31,7 @@ function bestScore() {
 }
 
 // --- Liste de mots personnalisée ---
-// Deux listes stockées séparément du dictionnaire (data/words.json, éditable directement) :
+// Deux listes stockées séparément du dictionnaire (data/So lover.json, éditable directement) :
 // - mots ajoutés par les joueurs (viennent s'ajouter au dictionnaire de base)
 // - mots retirés du dictionnaire de base (exclus des parties, sans modifier le fichier source)
 

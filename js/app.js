@@ -19,14 +19,16 @@
   const MAX_PLAYERS = 8;
   const WORD_RE = /^[a-zàâäéèêëïîôöùûüçœæ'-]+$/i;
 
-  // Dictionnaire de base, chargé de façon asynchrone depuis data/<fichier>.json au démarrage
+  // Dictionnaire actif, chargé de façon asynchrone depuis data/<fichier>.json au démarrage
   // (voir tout en bas, section "Démarrage") — modifiable directement, ce fichier n'étant que
   // du JSON pur (pas de JS autour à respecter).
   let WORDS = [];
+  let RAW_DICTIONARY = [];
+  let DICTIONARY_IS_CARD_DECK = false;
 
   // Liste des dictionnaires disponibles dans data/ (noms de fichiers .json) et fichier actif.
-  let DICTIONARIES = ['words.json'];
-  let currentDictionaryFile = 'words.json';
+  let DICTIONARIES = ['So lover.json'];
+  let currentDictionaryFile = 'So lover.json';
 
   // Terminaisons de conjugaison assez spécifiques pour repérer un verbe conjugué avec peu
   // de faux positifs (on évite volontairement les terminaisons trop courtes/ambiguës comme
@@ -45,14 +47,14 @@
 
   /** Nom lisible pour un fichier dictionnaire (ex. "words-enfants.json" -> "words enfants"). */
   function dictionaryLabel(file) {
-    if (file === 'words.json') return 'So Lover';
+    if (file === 'So lover.json') return 'So Lover';
     const raw = file.replace(/\.json$/i, '').replace(/[-_]+/g, ' ');
     return raw.replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   /** Petite icône associée à chaque dictionnaire, pour le sélecteur de l'accueil. */
   function dictionaryIcon(file) {
-    if (file === 'words.json') return '🍀';
+    if (file === 'So lover.json') return '🍀';
     if (/ecolo/i.test(file)) return '🌿';
     if (/sensuel/i.test(file)) return '❤️';
     return '📘';
@@ -148,7 +150,7 @@
     return round.tiles.find((t) => t.id === tileId) || null;
   }
 
-  // --- Liste de mots effective (dictionnaire de base + ajouts - retraits) ---
+  // --- Liste de mots effective (dictionnaire actif + ajouts - retraits) ---
 
   function normalizeWord(word) {
     const w = String(word || '').trim().toLowerCase();
@@ -156,11 +158,46 @@
     return w;
   }
 
+  function isCardDeckDictionary(data) {
+    return Array.isArray(data) && data.length > 0 && data.every((card) => Array.isArray(card) && card.length === 4);
+  }
+
+  function normalizeCard(card) {
+    return card.map((word) => String(word));
+  }
+
+  function uniqueWordsFromCards(cards) {
+    const seen = new Set();
+    const words = [];
+    cards.forEach((card) => {
+      card.forEach((word) => {
+        const key = normalizeWord(word);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        words.push(String(word));
+      });
+    });
+    return words;
+  }
+
+  function dictionaryHasWord(word) {
+    const key = normalizeWord(word);
+    if (!key) return false;
+    return WORDS.some((candidate) => normalizeWord(candidate) === key);
+  }
+
+  function currentGameDictionary() {
+    return DICTIONARY_IS_CARD_DECK ? RAW_DICTIONARY : WORDS;
+  }
+
   function getWordList() {
-    const removed = new Set(Storage.loadRemovedWords ? Storage.loadRemovedWords() : []);
+    const removed = new Set((Storage.loadRemovedWords ? Storage.loadRemovedWords() : []).map((w) => normalizeWord(w)));
     const custom = Storage.loadCustomWords ? Storage.loadCustomWords() : [];
-    const base = WORDS.filter((w) => !removed.has(w));
-    custom.forEach((w) => { if (!removed.has(w) && !base.includes(w)) base.push(w); });
+    const base = WORDS.filter((w) => !removed.has(normalizeWord(w)));
+    custom.forEach((w) => {
+      const key = normalizeWord(w);
+      if (!removed.has(key) && !base.some((candidate) => normalizeWord(candidate) === key)) base.push(w);
+    });
     return base;
   }
 
@@ -168,8 +205,8 @@
   function getFilteredWords() {
     const removed = Storage.loadRemovedWords ? Storage.loadRemovedWords() : [];
     const rawCustom = Storage.loadCustomWords ? Storage.loadCustomWords() : [];
-    const custom = rawCustom.filter((w) => !WORDS.includes(w));
-    const removedSet = new Set(removed);
+    const custom = rawCustom.filter((w) => !dictionaryHasWord(w));
+    const removedSet = new Set(removed.map((w) => normalizeWord(w)));
     const status = state.wordFilterStatus;
     let items;
     if (status === 'custom') {
@@ -177,11 +214,11 @@
     } else if (status === 'removed') {
       items = removed.map((w) => ({ word: w, status: 'removed' }));
     } else if (status === 'dictionary') {
-      items = WORDS.filter((w) => !removedSet.has(w)).map((w) => ({ word: w, status: 'dictionary' }));
+      items = WORDS.filter((w) => !removedSet.has(normalizeWord(w))).map((w) => ({ word: w, status: 'dictionary' }));
     } else if (status === 'verbs') {
-      items = WORDS.filter((w) => !removedSet.has(w) && isLikelyConjugatedVerb(w)).map((w) => ({ word: w, status: 'dictionary' }));
+      items = WORDS.filter((w) => !removedSet.has(normalizeWord(w)) && isLikelyConjugatedVerb(w)).map((w) => ({ word: w, status: 'dictionary' }));
     } else {
-      items = WORDS.filter((w) => !removedSet.has(w)).map((w) => ({ word: w, status: 'dictionary' }))
+      items = WORDS.filter((w) => !removedSet.has(normalizeWord(w))).map((w) => ({ word: w, status: 'dictionary' }))
         .concat(custom.map((w) => ({ word: w, status: 'custom' })))
         .concat(removed.map((w) => ({ word: w, status: 'removed' })));
     }
@@ -335,7 +372,7 @@
         <button class="btn-fab-primary" data-action="start-game" title="Commencer la partie">▶️</button>
         <button class="btn btn-link" data-action="toggle-rules">📖 Règles du jeu</button>
         ${state.rulesOpen ? renderRules() : ''}
-        <button class="btn btn-link" data-action="open-words">📝 Gérer les mots</button>
+        <button class="btn btn-link" data-action="open-words">📝 Gérer les cartes</button>
       </section>`;
   }
 
@@ -367,14 +404,17 @@
 
   function renderWordsManager() {
     const removed = Storage.loadRemovedWords ? Storage.loadRemovedWords() : [];
-    const custom = (Storage.loadCustomWords ? Storage.loadCustomWords() : []).filter((w) => !WORDS.includes(w));
+    const custom = (Storage.loadCustomWords ? Storage.loadCustomWords() : []).filter((w) => !dictionaryHasWord(w));
     const rawQuery = state.wordFilterQuery || '';
     const query = normalizeWord(rawQuery);
+    const canEditWords = !DICTIONARY_IS_CARD_DECK;
 
     let addSuggestionHTML = '';
     if (rawQuery.trim() && !query) {
       addSuggestionHTML = `<p class="word-search-result">Mot invalide (lettres uniquement).</p>`;
-    } else if (query && !WORDS.includes(query) && !custom.includes(query) && !removed.includes(query)) {
+    } else if (DICTIONARY_IS_CARD_DECK) {
+      addSuggestionHTML = '<p class="word-search-result">Ce dictionnaire est au format cartes de 4 mots. La gestion carte par carte est désactivée ici.</p>';
+    } else if (query && !dictionaryHasWord(query) && !custom.includes(query) && !removed.includes(query)) {
       addSuggestionHTML = `<p class="word-search-result">« ${esc(query)} » n'existe pas encore.
         <button class="btn btn-secondary" data-action="add-word" data-word="${esc(query)}">+ Ajouter ce mot</button></p>`;
     }
@@ -401,7 +441,7 @@
       const title = item.status === 'removed' ? 'Remettre' : 'Retirer';
       return `<div class="word-cell word-cell--${item.status}">
         <span>${esc(item.word)}</span>
-        <button class="word-cell-btn" data-action="${action}" data-word="${esc(item.word)}" title="${title}">${icon}</button>
+        <button class="word-cell-btn" ${canEditWords ? `data-action="${action}" data-word="${esc(item.word)}"` : 'disabled'} title="${title}">${icon}</button>
       </div>`;
     }).join('') : '<p class="hint">Aucun mot ne correspond à ce filtre.</p>';
 
@@ -409,11 +449,12 @@
 
     return `
       <div class="rules-box words-box">
-        <h3>Gérer les mots</h3>
+        <h3>${DICTIONARY_IS_CARD_DECK ? 'Gérer les cartes' : 'Gérer les mots'}</h3>
         <p class="hint">Vos ajouts/retraits sont enregistrés dans l'app, mais n'existent pas dans le fichier <code>data/${esc(currentDictionaryFile)}</code> tant que vous ne l'avez pas remplacé.</p>
+        ${DICTIONARY_IS_CARD_DECK ? '<p class="hint">Ce dictionnaire est basé sur des cartes de 4 mots : l’édition carte par carte est désactivée ici.</p>' : ''}
         <div class="word-export-actions">
-          <button class="btn btn-secondary" data-action="export-words">💾 Exporter la liste (${esc(currentDictionaryFile)})</button>
-          ${(custom.length || removed.length) ? `<button class="btn-link" data-action="reset-word-overrides">Effacer mes ajustements (après export)</button>` : ''}
+          <button class="btn btn-secondary" data-action="export-words">💾 Exporter le fichier (${esc(currentDictionaryFile)})</button>
+          ${(!DICTIONARY_IS_CARD_DECK && (custom.length || removed.length)) ? `<button class="btn-link" data-action="reset-word-overrides">Effacer mes ajustements (après export)</button>` : ''}
         </div>
         <p class="hint">Filtrez la liste ci-dessous, ou tapez un mot pour l'ajouter s'il n'existe pas encore.</p>
         <div class="word-filters">${filterButtonsHTML}</div>
@@ -596,16 +637,17 @@
   }
 
   function addWordAction(word) {
+    if (DICTIONARY_IS_CARD_DECK) return;
     const w = normalizeWord(word);
     if (!w || !Storage.loadCustomWords || !Storage.saveCustomWords) return;
-    if (!WORDS.includes(w)) {
+    if (!dictionaryHasWord(w)) {
       const custom = Storage.loadCustomWords();
       if (!custom.includes(w)) {
         custom.push(w);
         Storage.saveCustomWords(custom);
       }
     }
-    // si le mot avait été retiré du dictionnaire de base, on annule ce retrait
+    // si le mot avait été retiré, on annule ce retrait
     if (Storage.loadRemovedWords && Storage.saveRemovedWords) {
       const removed = Storage.loadRemovedWords().filter((x) => x !== w);
       Storage.saveRemovedWords(removed);
@@ -615,6 +657,7 @@
   }
 
   function removeCustomWordAction(word) {
+    if (DICTIONARY_IS_CARD_DECK) return;
     if (!Storage.loadCustomWords || !Storage.saveCustomWords) return;
     const custom = Storage.loadCustomWords().filter((w) => w !== word);
     Storage.saveCustomWords(custom);
@@ -622,6 +665,7 @@
   }
 
   function excludeWordAction(word) {
+    if (DICTIONARY_IS_CARD_DECK) return;
     const w = normalizeWord(word);
     if (!w || !Storage.loadRemovedWords || !Storage.saveRemovedWords) return;
     const removed = Storage.loadRemovedWords();
@@ -633,6 +677,7 @@
   }
 
   function restoreWordAction(word) {
+    if (DICTIONARY_IS_CARD_DECK) return;
     if (!Storage.loadRemovedWords || !Storage.saveRemovedWords) return;
     const removed = Storage.loadRemovedWords().filter((w) => w !== word);
     Storage.saveRemovedWords(removed);
@@ -641,6 +686,7 @@
 
   /** Retire d'un coup tous les mots du dictionnaire actuellement filtrés (ex: tous les verbes conjugués détectés). */
   function excludeAllFilteredAction() {
+    if (DICTIONARY_IS_CARD_DECK) return;
     if (!Storage.loadRemovedWords || !Storage.saveRemovedWords) return;
     const toRemove = getFilteredWords().filter((it) => it.status === 'dictionary').map((it) => it.word);
     if (!toRemove.length) return;
@@ -651,13 +697,14 @@
   }
 
   /**
-   * Génère un nouveau data/words.json à partir du dictionnaire de base + ajouts - retraits,
-   * et déclenche son téléchargement. L'app ne peut pas écrire sur le disque du projet :
-   * il faut remplacer manuellement le fichier data/words.json par celui téléchargé.
+   * Génère un export JSON du dictionnaire actif + ajouts - retraits, puis déclenche son
+   * téléchargement. L'app ne peut pas écrire sur le disque du projet : il faut remplacer
+   * manuellement le fichier de données par celui téléchargé.
    */
   function exportWordsAction() {
-    const list = Array.from(new Set(getWordList())).sort((a, b) => a.localeCompare(b, 'fr'));
-    const body = JSON.stringify(list, null, 2) + '\n';
+    const body = DICTIONARY_IS_CARD_DECK
+      ? `${JSON.stringify(RAW_DICTIONARY, null, 2)}\n`
+      : `${JSON.stringify(Array.from(new Set(getWordList())).sort((a, b) => a.localeCompare(b, 'fr')), null, 2)}\n`;
     const blob = new Blob([body], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -669,9 +716,9 @@
     URL.revokeObjectURL(url);
   }
 
-  /** Efface les ajouts/retraits enregistrés dans l'app, une fois qu'ils ont été intégrés au data/words.json exporté. */
+  /** Efface les ajouts/retraits enregistrés dans l'app, une fois qu'ils ont été intégrés au fichier exporté. */
   function resetWordOverridesAction() {
-    const ok = window.confirm('Effacer les mots ajoutés/retirés enregistrés dans cette app ?\n\nÀ faire seulement après avoir remplacé data/words.json par le fichier exporté, sinon vos ajustements seront perdus.');
+    const ok = window.confirm('Effacer les mots ajoutés/retirés enregistrés dans cette app ?\n\nÀ faire seulement après avoir remplacé le fichier de données par le fichier exporté, sinon vos ajustements seront perdus.');
     if (!ok) return;
     if (Storage.saveCustomWords) Storage.saveCustomWords([]);
     if (Storage.saveRemovedWords) Storage.saveRemovedWords([]);
@@ -694,7 +741,7 @@
       finishGame();
       return;
     }
-    state.round = Game.generateRound(getWordList());
+    state.round = Game.generateRound(currentGameDictionary());
     state.clues = ['', '', '', ''];
     state.screen = 'transition';
     state.nextScreenAfterTransition = 'cluegiver';
@@ -713,7 +760,7 @@
 
   /** Ne concerne qu'une seule tuile (les indices déjà donnés pour ses 2 bords sont réinitialisés). */
   function rerollTileAction(slotIndex) {
-    Game.rerollTile(state.round, getWordList(), slotIndex);
+    Game.rerollTile(state.round, currentGameDictionary(), slotIndex);
     SLOT_EDGES[slotIndex].forEach((edgeIndex) => { state.clues[edgeIndex] = ''; });
     render();
   }
@@ -1383,13 +1430,17 @@
         return res.json();
       })
       .then((data) => {
-        if (!Array.isArray(data)) throw new Error('Format invalide (tableau de mots attendu)');
-        WORDS = data;
+        if (!Array.isArray(data)) throw new Error('Format invalide (tableau attendu)');
+        RAW_DICTIONARY = data;
+        DICTIONARY_IS_CARD_DECK = isCardDeckDictionary(data);
+        WORDS = DICTIONARY_IS_CARD_DECK
+          ? uniqueWordsFromCards(data.map((card) => normalizeCard(card)))
+          : data.slice();
       });
   }
 
   /** Essaie de lister les .json présents dans data/ (listing de répertoire, ex. serveur local
-   * simple), sinon retombe sur le manifeste data/dictionaries.json, sinon sur words.json seul. */
+    * simple), sinon retombe sur le manifeste data/dictionaries.json, sinon sur So lover.json seul. */
   function discoverDictionaryFiles() {
     return fetch('data/', { cache: 'no-cache' })
       .then((res) => (res.ok ? res.text() : Promise.reject(new Error('no listing'))))
@@ -1407,14 +1458,16 @@
       .catch(() => fetch('data/dictionaries.json', { cache: 'no-cache' })
         .then((res) => (res.ok ? res.json() : Promise.reject(new Error('no manifest'))))
         .then((list) => (Array.isArray(list) && list.length ? list : Promise.reject(new Error('empty manifest'))))
-        .catch(() => ['words.json']));
+        .catch(() => ['So lover.json']));
   }
 
   let wordsLoadFailed = false;
   discoverDictionaryFiles()
     .then((files) => {
       DICTIONARIES = files;
-      const defaultFile = DICTIONARIES.includes('words.json') ? 'words.json' : DICTIONARIES[0];
+      const defaultFile = DICTIONARIES.includes('So lover.json')
+        ? 'So lover.json'
+        : DICTIONARIES[0];
       currentDictionaryFile = defaultFile;
       applyTheme(currentDictionaryFile);
       return loadDictionaryFile(currentDictionaryFile);

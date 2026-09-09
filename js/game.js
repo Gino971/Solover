@@ -15,6 +15,10 @@ function shuffle(array) {
   return a;
 }
 
+function isCardDeckDictionary(dictionary) {
+  return Array.isArray(dictionary) && dictionary.length > 0 && Array.isArray(dictionary[0]);
+}
+
 /** Tire N mots distincts au hasard dans le dictionnaire. */
 function pickRandomWords(count, dictionary) {
   if (count > dictionary.length) {
@@ -70,13 +74,31 @@ function sameUnorderedPair(a, b) {
 
 /** Génère une nouvelle manche : 5 tuiles, une disposition-solution et les indices attendus. */
 function generateRound(dictionary) {
-  const words = pickRandomWords(TILES_PER_ROUND * TILE_SIDES, dictionary);
   const tiles = [];
-  for (let t = 0; t < TILES_PER_ROUND; t++) {
-    tiles.push({
-      id: `t${t}-${Math.random().toString(36).slice(2, 8)}`,
-      words: words.slice(t * TILE_SIDES, (t + 1) * TILE_SIDES),
+  if (isCardDeckDictionary(dictionary)) {
+    if (dictionary.length < TILES_PER_ROUND) {
+      throw new Error('Dictionnaire trop petit pour ce tirage');
+    }
+    const cards = shuffle(dictionary)
+      .filter((card) => Array.isArray(card) && card.length === TILE_SIDES)
+      .slice(0, TILES_PER_ROUND);
+    if (cards.length < TILES_PER_ROUND) {
+      throw new Error('Dictionnaire trop petit pour ce tirage');
+    }
+    cards.forEach((card, t) => {
+      tiles.push({
+        id: `t${t}-${Math.random().toString(36).slice(2, 8)}`,
+        words: card.slice(0, TILE_SIDES),
+      });
     });
+  } else {
+    const words = pickRandomWords(TILES_PER_ROUND * TILE_SIDES, dictionary);
+    for (let t = 0; t < TILES_PER_ROUND; t++) {
+      tiles.push({
+        id: `t${t}-${Math.random().toString(36).slice(2, 8)}`,
+        words: words.slice(t * TILE_SIDES, (t + 1) * TILE_SIDES),
+      });
+    }
   }
   const order = shuffle(tiles);
   const placed = order.slice(0, CLOVER_SLOTS);
@@ -102,20 +124,27 @@ function checkGuess(guessArrangement, solutionCorners) {
 }
 
 /**
- * Retire la tuile d'une case de la solution et la remplace par une tuile neuve
- * (4 mots inédits dans la manche). Ne concerne qu'une seule tuile à la fois,
- * utile quand un mot tiré semble impropre au jeu. Mute `round` en place.
+ * Retire la tuile d'une case de la solution et la remplace par une tuile neuve.
+ * Ne concerne qu'une seule tuile à la fois. Mute `round` en place.
  */
 function rerollTile(round, dictionary, slotIndex) {
-  const usedWords = new Set();
-  round.tiles.forEach((t) => t.words.forEach((w) => usedWords.add(w)));
+  if (isCardDeckDictionary(dictionary)) {
+    const candidates = dictionary.filter((card) => Array.isArray(card) && card.length === TILE_SIDES);
+    if (!candidates.length) throw new Error('Dictionnaire trop petit pour ce tirage');
+    const newWords = shuffle(candidates)[0].slice(0, TILE_SIDES);
+    const newTile = { id: `r-${Math.random().toString(36).slice(2, 8)}`, words: newWords };
+    const oldTileId = round.solutionArrangement[slotIndex].tile.id;
+    const tileArrIndex = round.tiles.findIndex((t) => t.id === oldTileId);
+    if (tileArrIndex !== -1) round.tiles[tileArrIndex] = newTile;
+    round.solutionArrangement[slotIndex] = { tile: newTile, rotation: Math.floor(Math.random() * TILE_SIDES) };
+    round.solutionCorners = computeCorners(round.solutionArrangement);
+    return;
+  }
+
   const newWords = [];
   while (newWords.length < TILE_SIDES) {
     const candidate = dictionary[Math.floor(Math.random() * dictionary.length)];
-    if (!usedWords.has(candidate)) {
-      newWords.push(candidate);
-      usedWords.add(candidate);
-    }
+    newWords.push(candidate);
   }
   const newTile = { id: `r-${Math.random().toString(36).slice(2, 8)}`, words: newWords };
   const oldTileId = round.solutionArrangement[slotIndex].tile.id;

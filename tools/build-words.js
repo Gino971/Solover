@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Script de génération ponctuelle du dictionnaire (data/words.json).
+// Script de génération ponctuelle du dictionnaire (data/So lover.json).
 // Source brute : FrequencyWords (hermitdave, licence MIT) - fr_50k.txt
 // Usage : node tools/build-words.js <chemin_fr_50k.txt>
 'use strict';
@@ -109,7 +109,7 @@ result.sort();
 
 const outDir = path.join(__dirname, '..', 'data');
 fs.mkdirSync(outDir, { recursive: true });
-const outPath = path.join(outDir, 'words.json');
+const outPath = path.join(outDir, 'So lover.json');
 fs.writeFileSync(outPath, JSON.stringify(result, null, 2) + '\n', 'utf8');
 
 console.log(`OK: ${result.length} mots écrits dans ${outPath}`);
