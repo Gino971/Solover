@@ -224,7 +224,6 @@ h2 {
   overflow-x: auto;
   justify-content: safe center;
   padding: 4px 2px 8px;
-  -webkit-overflow-scrolling: touch;
 }
 
 .dict-card {
@@ -238,8 +237,8 @@ h2 {
   border-radius: 16px;
   border: 2px solid rgba(217, 232, 221, 0.8);
   background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(5px);
   -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
   color: var(--green-dark);
   font-weight: 700;
   font-size: 0.78rem;
@@ -260,8 +259,8 @@ h2 {
 .dict-card.active {
   border-color: var(--shape-c3);
   background: linear-gradient(160deg, color-mix(in srgb, var(--shape-c3) 78%, transparent), color-mix(in srgb, var(--shape-c4) 78%, transparent));
-  backdrop-filter: blur(5px);
   -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
   color: white;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   cursor: default;
@@ -353,8 +352,8 @@ h2 {
   border-radius: 50%;
   border: 2px solid var(--green);
   background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(5px);
   -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
   color: var(--green-dark);
   font-size: 1.4rem;
   line-height: 1;
@@ -416,8 +415,8 @@ h2 {
   border-radius: 8px;
   border: 1.5px solid #cfe3d6;
   background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(5px);
   -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
   font-size: 1rem;
 }
 
